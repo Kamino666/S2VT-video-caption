@@ -24,6 +24,13 @@ def build_vocab(all_words, min_feq=3):
 
 
 def parse_csv(csv_file, v2id_file, captions_file):
+    """
+    解析MSVD数据结构的csv文件
+    :param csv_file: path of MSVD videos
+    :param v2id_file: video to file的对应json文件
+    :param captions_file: 生成的caption保存路径
+    :return: None
+    """
     # read csv
     file = pd.read_csv(csv_file, encoding='utf-8')
     data = pd.DataFrame(file)
@@ -59,16 +66,30 @@ def parse_csv(csv_file, v2id_file, captions_file):
     captions = [[word2ix.get(w, 2) for w in caption]
                 for caption in tqdm(captions, desc='turing words into index')]
 
+    # get dict of id: [captions]
+    caption_dict = {}
+    for id, cap in zip(ids, captions):
+        if id not in caption_dict.keys():
+            caption_dict[id] = []
+        caption_dict[id].append(cap)
+
     # save files
     with open(captions_file, 'w+', encoding='utf-8') as f:
         json.dump(
             {'word2ix': word2ix,
              'ix2word': ix2word,
-             'captions': list(zip(ids, captions))}, f
+             'captions': caption_dict}, f
         )
 
 
 def human_test(test_num, v2id_file, captions_file):
+    """
+    随机抽取test_num个视频以及对应的一个Caption，手动查看是否对应成功
+    :param test_num:
+    :param v2id_file:
+    :param captions_file:
+    :return:
+    """
     import random
     f1 = open(v2id_file, encoding='utf-8')
     f2 = open(captions_file, encoding='utf-8')
@@ -77,11 +98,7 @@ def human_test(test_num, v2id_file, captions_file):
     for i in range(test_num):
         sample = random.choice(list(v2id.keys()))
         print("choose sample: {}: {}".format(sample, v2id[sample]))
-        caption = None
-        for cap in data['captions']:
-            if cap[0] == v2id[sample]:
-                caption = cap[1]
-                break
+        caption = random.choice(data['captions'][str(v2id[sample])])
         caption = [data['ix2word'][str(w)] for w in caption]
         print(' '.join(caption))
 
@@ -90,9 +107,9 @@ def human_test(test_num, v2id_file, captions_file):
 
 
 if __name__ == '__main__':
-    # human_test(5, v2id_file=r'./data/video2id.json', captions_file=r'./data/captions.json')
-    parse_csv(
-        csv_file=r'./data/video_corpus.csv',
-        v2id_file=r'./data/video2id.json',
-        captions_file=r'./data/captions.json'
-    )
+    human_test(5, v2id_file=r'./data/video2id.json', captions_file=r'./data/captions.json')
+    # parse_csv(
+    #     csv_file=r'./data/video_corpus.csv',
+    #     v2id_file=r'./data/video2id.json',
+    #     captions_file=r'./data/captions.json'
+    # )

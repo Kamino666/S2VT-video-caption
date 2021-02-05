@@ -9,8 +9,8 @@ from tqdm import tqdm
 def build_vocab(all_words, min_feq=3):
     # use collections.Counter() to build vocab
     all_words = all_words.most_common()
-    word2ix = {'<sos>': 0, '<eos>': 1, '<unk>': 2}
-    for ix, (word, feq) in enumerate(tqdm(all_words, desc='building vocab'), start=3):
+    word2ix = {'<pad>': 0, '<sos>': 1, '<eos>': 2, '<unk>': 3}
+    for ix, (word, feq) in enumerate(tqdm(all_words, desc='building vocab'), start=4):
         if feq < min_feq:
             break
         word2ix[word] = ix

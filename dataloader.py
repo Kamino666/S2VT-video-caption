@@ -3,45 +3,77 @@ import torch
 import numpy as np
 import random
 import json
-import h5py
+import pathlib as plb
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class VideoDataset(Dataset):
-    def __init__(self, v2id_file, captions_file, feat_file,
-                 max_len, data_split):
-        """
-        :param v2id_file:
-        :param captions_file:
-        :param feat_file:
-        :param max_len: Caption的最大长度，大于这个长度的被截断
-        :param data_split: list, 标志着被分配到这个数据集的video的id，在外部划分训练集/测试集
-        """
-        self.data_split = data_split
-        self.max_len = max_len
-        with open(v2id_file, encoding='utf-8') as f:
-            self.v2id = json.load(f)
+    def __init__(self, captions_file, feat_path):
         with open(captions_file, encoding='utf-8') as f:
             data = json.load(f)
             self.word2ix = data['word2ix']
             self.ix2word = data['ix2word']
-            self.captions = data['captions']  # [id, caption]
-        f = h5py.File(feat_file)
-        self.feat = f['feats']
+            self.captions = data['captions']  # [name, caption]
+        self.feat_paths = [i for i in plb.Path(feat_path).glob('*.npy')]
 
-    def __getitem__(self, ix):
+    def __getitem__(self, index):
         """
-        根据索引，在data_split中找到对应的video id
-        然后从相应的caption中随机抽取一个返回
-        :param ix: index of data
-        :return: tuple(img_feat, label)
+        抽取一个feat，随机一个对应的caption出来
+        :param index: index of data
+        :return: tuple(tensor(img_feat), tensor(label))
         """
-        feat = self.feat[self.data_split[ix]]
-        labels = self.captions[str(self.data_split[ix])]
+        feat = np.load(str(self.feat_paths[index]))
+        feat = torch.tensor(feat)
+        labels = self.captions[self.feat_paths[index].stem]
         label = random.choice(labels)
-        label = label[:self.max_len-1] if self.max_len > len(label) else label
         return feat, label
 
     def __len__(self):
-        return len(self.data_split)
+        return len(self.feat_paths)
 
 
+def collate_fn(data):
+    """
+    batch内对feat和label分别进行排序，给两者一个序号以便对应。pad成同样的大小。
+    :param data: list[batch_size, [feat, label]]
+    :return: tensor[batch_size, feat_max, 2048], tensor[batch_size, label_max], list[batch_size], list[batch_size]
+    """
+    print(data)
+    # extract feat and label from batch
+    batch_size = len(data)
+    feat_dim = data[0][0].shape[1]
+    feat_max = 0
+    label_max = 0
+    feats = []
+    labels = []
+    for i, item in enumerate(data):
+        feat, label = item  # feat:tensor label:list
+        feat_max = feat.shape[0] if feat_max < feat.shape[0] else feat_max
+        label_max = len(label) if label_max < len(label) else label_max
+        labels.append([i, label])
+        feats.append([i, feat])
+
+    # sort and pad
+    feats.sort(reverse=True, key=lambda x: x[1].shape[1])
+    feat_id, feats = zip(*feats)
+    feats_np = np.zeros([batch_size, feat_max, feat_dim], dtype=np.float)
+    for i in range(batch_size):
+        feats_np[i][0:len(feats[i])] = feats[i]
+
+    labels.sort(reverse=True, key=lambda x: len(x[1]))
+    label_id, labels = zip(*labels)
+    labels_np = np.zeros([batch_size, label_max], dtype=np.long)
+    for i in range(batch_size):
+        labels_np[i][0:len(labels[i])] = labels[i]
+
+    # build tensor
+    feats_ts = torch.tensor(feats_np, device=device)
+    labels_ts = torch.tensor(labels_np, dtype=torch.long, device=device)
+
+    return feats_ts, labels_ts, feat_id, label_id
+
+
+if __name__ == '__main__':
+    trainset = VideoDataset('data/captions.json', 'data/feats')
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, collate_fn=collate_fn)

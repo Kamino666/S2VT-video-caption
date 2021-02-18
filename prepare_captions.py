@@ -23,11 +23,10 @@ def build_vocab(all_words, min_feq=3):
     return word2ix, ix2word
 
 
-def parse_csv(csv_file, v2id_file, captions_file):
+def parse_csv(csv_file, captions_file):
     """
     解析MSVD数据结构的csv文件
     :param csv_file: path of MSVD videos
-    :param v2id_file: video to file的对应json文件
     :param captions_file: 生成的caption保存路径
     :return: None
     """
@@ -41,37 +40,34 @@ def parse_csv(csv_file, v2id_file, captions_file):
     # get valid captions and its video ids
     captions = []
     counter = Counter()
-    ids = []
-    f = open(v2id_file, encoding='utf-8')
-    v2id = json.load(f)
+    filenames = []
     """遍历所有的英文描述，找到feature包含的video对应的caption，存储。"""
     for _, name, start, end, sentence in tqdm(eng_data[['VideoID', 'Start', 'End', 'Description']].itertuples(),
                                               desc='reading captions'):
         # get id
-        file_name = name + '_' + str(start) + '_' + str(end) + '.avi'
-        if file_name not in v2id:
-            continue
-        ids.append(v2id[file_name])
+        file_name = name + '_' + str(start) + '_' + str(end)  # + '.avi'
+        # if file_name not in v2id:
+        #     continue
+        filenames.append(file_name)
         # process caption
         sentence = sentence.lower()
         sentence = re.sub(r'[.!,;?:]', ' ', sentence).split()
         counter.update(sentence)  # put words into a set
         captions.append(['<sos>'] + sentence + ['<eos>'])
-    f.close()
 
     # build vocab
     word2ix, ix2word = build_vocab(counter)
 
-    # turn words into index (2 is <unk>)
-    captions = [[word2ix.get(w, 2) for w in caption]
+    # turn words into index (3 is <unk>)
+    captions = [[word2ix.get(w, 3) for w in caption]
                 for caption in tqdm(captions, desc='turing words into index')]
 
-    # get dict of id: [captions]
+    # build dict   filename: [captions]
     caption_dict = {}
-    for id, cap in zip(ids, captions):
-        if id not in caption_dict.keys():
-            caption_dict[id] = []
-        caption_dict[id].append(cap)
+    for name, cap in zip(filenames, captions):
+        if name not in caption_dict.keys():
+            caption_dict[name] = []
+        caption_dict[name].append(cap)
 
     # save files
     with open(captions_file, 'w+', encoding='utf-8') as f:
@@ -82,34 +78,26 @@ def parse_csv(csv_file, v2id_file, captions_file):
         )
 
 
-def human_test(test_num, v2id_file, captions_file):
+def human_test(test_num, captions_file):
     """
-    随机抽取test_num个视频以及对应的一个Caption，手动查看是否对应成功
+    随机抽取test_num个Caption，手动查看是否对应成功
     :param test_num:
-    :param v2id_file:
     :param captions_file:
     :return:
     """
     import random
-    f1 = open(v2id_file, encoding='utf-8')
-    f2 = open(captions_file, encoding='utf-8')
-    v2id = json.load(f1)
-    data = json.load(f2)
+    with open(captions_file, encoding='utf-8') as f:
+        data = json.load(f)
     for i in range(test_num):
-        sample = random.choice(list(v2id.keys()))
-        print("choose sample: {}: {}".format(sample, v2id[sample]))
-        caption = random.choice(data['captions'][str(v2id[sample])])
-        caption = [data['ix2word'][str(w)] for w in caption]
-        print(' '.join(caption))
-
-    f1.close()
-    f2.close()
+        sample_video = random.choice(list(data['captions'].keys()))
+        sample_cap = random.choice(data['captions'][sample_video])
+        sample_cap = [data['ix2word'][str(w)] for w in sample_cap]
+        print("[{}]: ".format(sample_video), ' '.join(sample_cap))
 
 
 if __name__ == '__main__':
-    human_test(5, v2id_file=r'./data/video2id.json', captions_file=r'./data/captions.json')
     # parse_csv(
     #     csv_file=r'./data/video_corpus.csv',
-    #     v2id_file=r'./data/video2id.json',
     #     captions_file=r'./data/captions.json'
     # )
+    human_test(5, captions_file=r'./data/captions.json')

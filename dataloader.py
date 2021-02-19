@@ -33,6 +33,38 @@ class VideoDataset(Dataset):
         return len(self.feat_paths)
 
 
+# TODO(Kamino): 改动collate_fn，不用这么复杂，按照feat的长度给这些排好序就行
+def collate_fn2(data):
+    """
+    batch内根据feat的长度进行排序，并且pad成同样的大小
+    :param data: list[batch_size, list[feat, label]]
+    :return: tensor[batch_size, feat_max, 2048], tensor[batch_size, label_max]
+    """
+    # extract feat and label from batch
+    batch_size = len(data)
+    feat_dim = data[0][0].shape[1]
+    feat_max = 0
+    label_max = 0
+    for i, item in enumerate(data):
+        feat, label = item  # feat:tensor label:list
+        feat_max = feat.shape[0] if feat_max < feat.shape[0] else feat_max
+        label_max = len(label) if label_max < len(label) else label_max
+
+    # sort and pad
+    data.sort(reverse=True, key=lambda x: x[0].shape[0])
+    feats_np = np.zeros([batch_size, feat_max, feat_dim], dtype=np.float)
+    labels_np = np.zeros([batch_size, label_max], dtype=np.long)
+    for i, (feat, label) in enumerate(data):
+        feats_np[i][0:feat.shape[0]] = feat
+        labels_np[i][0:len(label)] = label
+
+    # build tensor
+    feats_ts = torch.tensor(feats_np, device=device)
+    labels_ts = torch.tensor(labels_np, dtype=torch.long, device=device)
+
+    return feats_ts, labels_ts
+
+
 def collate_fn(data):
     """
     batch内对feat和label分别进行排序，给两者一个序号以便对应。pad成同样的大小。
@@ -76,4 +108,4 @@ def collate_fn(data):
 
 if __name__ == '__main__':
     trainset = VideoDataset('data/captions.json', 'data/feats')
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, collate_fn=collate_fn)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, collate_fn=collate_fn2)

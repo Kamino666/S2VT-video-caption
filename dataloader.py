@@ -33,7 +33,6 @@ class VideoDataset(Dataset):
         return len(self.feat_paths)
 
 
-# TODO(Kamino): 改动collate_fn，不用这么复杂，按照feat的长度给这些排好序就行
 def collate_fn2(data):
     """
     batch内根据feat的长度进行排序，并且pad成同样的大小
@@ -59,7 +58,7 @@ def collate_fn2(data):
         labels_np[i][0:len(label)] = label
 
     # build tensor
-    feats_ts = torch.tensor(feats_np, device=device)
+    feats_ts = torch.tensor(feats_np, dtype=torch.float, device=device)
     labels_ts = torch.tensor(labels_np, dtype=torch.long, device=device)
 
     return feats_ts, labels_ts

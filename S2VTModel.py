@@ -33,6 +33,13 @@ class S2VTModel(nn.Module):
         self.out = nn.Linear(self.dim_hidden, self.dim_output)
 
     def forward(self, feats, feat_lengths, targets, mode='train'):
+        """
+        :param feats: tensor[B, T, vocab_size]
+        :param feat_lengths: tensor[B, 1]
+        :param targets: tensor[B, T, 1]
+        :param mode: train or validation
+        :return:
+        """
         device = feats.device
         batch_size, n_frames, _ = feats.shape  # 获取视频feature的帧数
         # 对于视频层和文字层有两种不同的pad
@@ -76,30 +83,45 @@ class S2VTModel(nn.Module):
             # 用cat转成tensor
             seq_probs = torch.cat(seq_probs, 1)
             seq_preds = torch.cat(seq_preds, 1)
-        # TODO(Kamino): 写好teacher-forcing的部分
-        # teacher-forcing 暂时写不出来
-        # else:
-        #     # 预测的时候，current_words初始化为[b, 1]的序列，即batch全都是SOS
-        #     current_words = self.embedding(
-        #         Variable(torch.LongTensor([self.sos_id] * batch_size)).cuda())
-        #     for i in range(self.max_length - 1):
-        #         # 莫名其妙的优化
-        #         self.rnn1.flatten_parameters()
-        #         self.rnn2.flatten_parameters()
-        #         # 老样子
-        #         output1, state1 = self.rnn1(padding_frames, state1)
-        #         # 老样子，不过current_words是实际预测出来的
-        #         input2 = torch.cat((output1, current_words.unsqueeze(1)), dim=2)
-        #         # 老样子
-        #         output2, state2 = self.rnn2(input2, state2)
-        #         # 老样子，求概率
-        #         logits = self.out(output2.squeeze(1))
-        #         logits = F.log_softmax(logits, dim=1)
-        #         seq_probs.append(logits.unsqueeze(1))
-        #         # 另外直接用max求出结果，元组第二个是下标
-        #         _, preds = torch.max(logits, 1)
-        #         current_words = self.embedding(preds)
-        #         seq_preds.append(preds.unsqueeze(1))
-        #     seq_probs = torch.cat(seq_probs, 1)
-        #     seq_preds = torch.cat(seq_preds, 1)
+        elif mode == 'validation':
+            current_words = self.embedding(
+                torch.ones([batch_size, 1], dtype=torch.long, device=device)
+            )
+            for i in range(self.max_length):  # <eos> not included
+                # 用pad和上一次的state得到结果
+                output1, state1 = self.rnn1(padding_frames, state1)
+                # 结果和下一个目标词合并
+                input2 = torch.cat((output1, current_words), dim=2)
+                # 生成新的词向量输出和state
+                output2, state2 = self.rnn2(input2, state2)
+                # 映射到vocab 求概率
+                logits = self.out(output2.squeeze(1))
+                logits = F.log_softmax(logits, dim=1)
+                # logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
+                _, preds = torch.max(logits, 1, keepdim=True)
+                # 更新current_words
+                current_words = self.embedding(preds)
+                # 存储结果
+                seq_preds.append(preds)
+                seq_probs.append(logits.unsqueeze(1))
+            # 用cat转成tensor
+            seq_probs = torch.cat(seq_probs, 1)
+            seq_preds = torch.cat(seq_preds, 1)
+            seq_preds = pad_after_eos(seq_preds)
         return seq_probs, seq_preds
+
+
+def pad_after_eos(preds):
+    """
+    把eos之后的全部置零
+    :param preds: [batch_size, max_len, 1]
+    :return:
+    """
+    if len(preds.shape) == 3:
+        preds = preds.squeeze(2)
+    for seq in preds:
+        for i in range(preds.shape[1]):
+            if seq[i].item() == 2:
+                seq[i:] = 0
+                break
+    return preds

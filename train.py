@@ -7,22 +7,29 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy as np
 import json
 import random
+import time
+import os
 from tqdm import tqdm
+from tensorboardX import SummaryWriter
 
-from dataloader import VideoDataset, collate_fn2
+from dataloader import VideoDataset, collate_fn
 from S2VTModel import S2VTModel
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+writer = SummaryWriter()
 
 
 class Opt:
     train_percentage = 0.9
-    batch_size = 128
+    batch_size = 16
     max_len = 30
     dim_hidden = 128
     dim_word = 256
     lr = 0.001
     EPOCHS = 100
+    save_freq = 30
+    save_path = './checkpoint'
+    start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
 
 
 def get_pad_lengths(data, pad_id=0):
@@ -43,7 +50,7 @@ def train():
     opt = Opt()
     # prepare data
     trainset = VideoDataset('data/captions.json', 'data/feats')
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, collate_fn=collate_fn2)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True, collate_fn=collate_fn)
     word2ix = trainset.word2ix
     ix2word = trainset.ix2word
     vocab_size = len(word2ix)
@@ -71,13 +78,14 @@ def train():
     for epoch in range(opt.EPOCHS):
         running_loss = 0.0
         loss_count = 0
-        for index, (feats, targets) in enumerate(
-                tqdm(train_loader, desc="training")):
+        for index, (feats, targets, IDs) in enumerate(
+                tqdm(train_loader, desc="epoch:{}".format(epoch))):
             optimizer.zero_grad()
             model.train()
 
             feat_lengths = get_pad_lengths(feats)
             probs, preds = model(feats, feat_lengths, targets)
+            print(preds)
             # probs: [batch_size, label_max, vocab_size] targets: [batch_size, label_max]
             # print(probs.shape, targets.shape)
             loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
@@ -89,7 +97,15 @@ def train():
             running_loss += loss.item()
             loss_count += 1
         running_loss /= loss_count
+        writer.add_scalar('loss', running_loss, global_step=epoch)
         print(running_loss)
+        # save checkpoint
+        if epoch % opt.save_freq == 0 and epoch != 0:
+            print('epoch:{}, saving checkpoint'.format(epoch))
+            torch.save(model, os.path.join(opt.save_path,
+                                           opt.start_time + str(epoch) + '.pth'))
+    # save model
+    torch.save(model, os.path.join(opt.save_path, opt.start_time + 'final.pth'))
 
 
 if __name__ == '__main__':

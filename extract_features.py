@@ -8,7 +8,6 @@ import pathlib as plb
 import numpy as np
 from tqdm import tqdm
 import json
-import h5py
 import torch.nn as nn
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -93,7 +92,7 @@ def extract(video_path, frame_path, feats_path):
     #     extract_frames(str(video), os.path.join(frame_path, str(video.stem)))
 
     # get features
-    extract_feats(frame_path, feats_path)
+    extract_feats(frame_path, feats_path, interval=5)
 
     # # save video to id
     # with open('./data/video2id.json', 'w+', encoding='utf-8') as f:

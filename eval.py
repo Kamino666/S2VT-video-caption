@@ -18,7 +18,7 @@ from train import get_pad_lengths
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Opt:
-    model_path = r"./checkpoint/21_02_19_13_13_31-final.pth"
+    model_path = r"./checkpoint/21_02_19_22_41_14-final.pth"
     batch_size = 8
 
 def eval():
@@ -45,7 +45,7 @@ def eval():
         model.train(mode=False)
         feat_lengths = get_pad_lengths(feats)
         with torch.no_grad():
-            probs, preds = model(feats, feat_lengths, targets, mode='train')
+            probs, preds = model(feats, feat_lengths, targets, mode='validation')
         # assert 1 == 0
         # save result
         for ID, pred in zip(IDs, preds):

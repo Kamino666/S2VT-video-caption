@@ -61,15 +61,19 @@ class S2VTModel(nn.Module):
         seq_probs = []
         seq_preds = []
         if mode == 'train':
-            # init current_words with <sos> 1    current_words: [batch_size, 1]
+            teacher_forcing_rate = 0.3
+            previous_words = None
             # current_words = self.embedding(torch.ones([batch_size, 1], dtype=torch.long, device=device))
             for i in range(targets.shape[1] - 1):  # <eos> not included
-                # 用目标词来控制长度和监督
-                current_words = self.embedding(targets[:, i])
+                if previous_words is None or random.random() < teacher_forcing_rate:
+                    # 用目标词来控制长度和监督
+                    current_words = self.embedding(targets[:, i])
+                else:
+                    current_words = previous_words
                 # 用pad和上一次的state得到结果
                 output1, state1 = self.rnn1(padding_frames, state1)
                 # 结果和下一个目标词合并
-                input2 = torch.cat((output1, current_words.unsqueeze(1)), dim=2)
+                input2 = torch.cat((output1, current_words.view([batch_size, 1, -1])), dim=2)
                 # 生成新的词向量输出和state
                 output2, state2 = self.rnn2(input2, state2)
                 # 映射到vocab 求概率
@@ -77,6 +81,8 @@ class S2VTModel(nn.Module):
                 logits = F.log_softmax(logits, dim=1)
                 # logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
                 _, preds = torch.max(logits, 1, keepdim=True)
+                # 更新current_words
+                previous_words = self.embedding(preds)
                 # 存储结果
                 seq_preds.append(preds)
                 seq_probs.append(logits.unsqueeze(1))

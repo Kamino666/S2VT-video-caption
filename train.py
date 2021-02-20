@@ -26,7 +26,7 @@ class Opt:
     dim_hidden = 128
     dim_word = 256
     lr = 0.001
-    EPOCHS = 100
+    EPOCHS = 200
     save_freq = 30
     save_path = './checkpoint'
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
@@ -85,7 +85,6 @@ def train():
 
             feat_lengths = get_pad_lengths(feats)
             probs, preds = model(feats, feat_lengths, targets)
-            print(preds)
             # probs: [batch_size, label_max, vocab_size] targets: [batch_size, label_max]
             # print(probs.shape, targets.shape)
             loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
@@ -111,7 +110,8 @@ def train():
 if __name__ == '__main__':
     train()
 
-# TODO(Kamino): 训练部分
-# TODO(Kamino): Optical Flow的部分
 # TODO(Kamino): METEOR评估指标
-# TODO(Kamino): 可视化
+# TODO(Kamino): Optical Flow的部分
+# TODO(Kamino): beam_search
+
+

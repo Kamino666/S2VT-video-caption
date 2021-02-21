@@ -45,9 +45,11 @@ def extract_feats(frame_path, feats_path, interval=10):
     :return:
     """
     # load model
-    model = pretrainedmodels.resnet152(pretrained='imagenet')
-    model.my_avgpool = nn.AdaptiveAvgPool2d([1, 1])
+    # model = pretrainedmodels.resnet152(pretrained='imagenet')
+    model = pretrainedmodels.vgg16(pretrained='imagenet')
+    model.last_linear = utils.Identity()
     model = model.to(device)
+    model.eval()
     load_image_fn = utils.LoadTransformImage(model)
 
     # load data
@@ -67,11 +69,8 @@ def extract_feats(frame_path, feats_path, interval=10):
             imgs[i] = img
         imgs = imgs.to(device)
         with torch.no_grad():
-            feats = model.features(imgs)
-            feats = model.my_avgpool(feats).squeeze(2).squeeze(2)
+            feats = model(imgs)
         feats = feats.cpu().numpy()
-        # with open(os.path.join(feats_path, video.name + ".npy"), 'w') as f:
-        #     pass
         np.save(os.path.join(feats_path, video.name + ".npy"), feats)
     print("extract feats successfully")
 
@@ -86,17 +85,11 @@ def extract(video_path, frame_path, feats_path):
     # get paths and get frames
     video_path = plb.Path(video_path)
     assert video_path.is_dir()
-    # video_to_id = {video.stem: i for i, video in enumerate(video_path.iterdir())}
-    # id_to_video = {v: k for k, v in video_to_id.items()}
     # for video in tqdm(video_path.iterdir(), desc='extracting frames'):
     #     extract_frames(str(video), os.path.join(frame_path, str(video.stem)))
 
     # get features
-    extract_feats(frame_path, feats_path, interval=5)
-
-    # # save video to id
-    # with open('./data/video2id.json', 'w+', encoding='utf-8') as f:
-    #     json.dump(video_to_id, f)
+    extract_feats(frame_path, feats_path, interval=10)
 
 
 if __name__ == '__main__':

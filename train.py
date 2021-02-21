@@ -20,16 +20,16 @@ writer = SummaryWriter()
 
 
 class Opt:
-    train_percentage = 0.9
     batch_size = 16
     max_len = 30
-    dim_hidden = 128
-    dim_word = 256
-    lr = 0.001
+    dim_hidden = 1000
+    dim_word = 500
+    lr = 0.0005
     EPOCHS = 200
-    save_freq = 30
+    save_freq = 10
     save_path = './checkpoint'
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
+    feat_dim = 4096
 
 
 def get_pad_lengths(data, pad_id=0):
@@ -51,6 +51,8 @@ def train():
     # prepare data
     trainset = VideoDataset('data/captions.json', 'data/feats')
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True, collate_fn=collate_fn)
+    testset = VideoDataset('data/captions.json', 'data/feats', mode='test')
+    test_loader = torch.utils.data.DataLoader(testset, batch_size=opt.batch_size, shuffle=False, collate_fn=collate_fn)
     word2ix = trainset.word2ix
     ix2word = trainset.ix2word
     vocab_size = len(word2ix)
@@ -58,13 +60,10 @@ def train():
     # build model
     model = S2VTModel(
         vocab_size,
-        opt.max_len,
-        opt.dim_hidden,
-        opt.dim_word,
-        sos_id=1, eos_id=2,
-        rnn_cell='lstm',
+        opt.feat_dim,
         rnn_dropout_p=0
     ).to(device)
+    # torch.save(model, 'test.pth')  # check
     optimizer = optim.Adam(
         model.parameters(),
         lr=opt.lr
@@ -76,7 +75,8 @@ def train():
     ###
 
     for epoch in range(opt.EPOCHS):
-        running_loss = 0.0
+        # train
+        train_running_loss = 0.0
         loss_count = 0
         for index, (feats, targets, IDs) in enumerate(
                 tqdm(train_loader, desc="epoch:{}".format(epoch))):
@@ -93,13 +93,33 @@ def train():
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item()
+            train_running_loss += loss.item()
             loss_count += 1
-        running_loss /= loss_count
-        writer.add_scalar('loss', running_loss, global_step=epoch)
-        print(running_loss)
+        train_running_loss /= loss_count
+        writer.add_scalar('train_loss', train_running_loss, global_step=epoch)
+
+        # test
+        test_running_loss = 0.0
+        loss_count = 0
+        for index, (feats, targets, IDs) in enumerate(test_loader):
+            optimizer.zero_grad()
+            model.eval()
+
+            feat_lengths = get_pad_lengths(feats)
+            with torch.no_grad():
+                probs, preds = model(feats, feat_lengths, targets)
+
+            loss = criterion(probs.contiguous().view(probs.shape[0] * probs.shape[1], -1)
+                             , targets[:, :-1].contiguous().view(-1))
+            test_running_loss += loss.item()
+            loss_count += 1
+        test_running_loss /= loss_count
+        writer.add_scalar('test_loss', test_running_loss, global_step=epoch)
+        print("train loss:{} test loss: {}".format(train_running_loss, test_running_loss))
+
         # save checkpoint
-        if epoch % opt.save_freq == 0 and epoch != 0:
+        # if epoch % opt.save_freq == 0 and epoch != 0:
+        if epoch % opt.save_freq == 0:
             print('epoch:{}, saving checkpoint'.format(epoch))
             torch.save(model, os.path.join(opt.save_path,
                                            opt.start_time + str(epoch) + '.pth'))

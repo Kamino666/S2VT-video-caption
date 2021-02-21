@@ -18,14 +18,14 @@ from train import get_pad_lengths
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Opt:
-    model_path = r"./checkpoint/21_02_19_22_41_14-final.pth"
+    model_path = r"./checkpoint/21_02_21_12_43_13-final.pth"
     batch_size = 8
 
 def eval():
     opt = Opt()
 
     # prepare data
-    validset = VideoDataset('data/captions.json', 'data/feats')
+    validset = VideoDataset('data/captions.json', 'data/feats', mode='train')
     valid_loader = torch.utils.data.DataLoader(validset, batch_size=opt.batch_size, shuffle=False, collate_fn=collate_fn)
     word2ix = validset.word2ix
     ix2word = validset.ix2word
@@ -38,14 +38,13 @@ def eval():
     ### start validation
     ###
 
-    criterion = nn.NLLLoss()
     prediction_dict = {}
     for index, (feats, targets, IDs) in enumerate(tqdm(valid_loader, desc="validation")):
         # get prediction and cal loss
-        model.train(mode=False)
+        model.eval()
         feat_lengths = get_pad_lengths(feats)
         with torch.no_grad():
-            probs, preds = model(feats, feat_lengths, targets, mode='validation')
+            probs, preds = model(feats, feat_lengths, targets=targets, mode='validation')
         # assert 1 == 0
         # save result
         for ID, pred in zip(IDs, preds):
@@ -58,9 +57,10 @@ def eval():
             word_preds = [ix2word[str(i.item())] for i in pred]
             prediction_dict[ID] = ' '.join(word_preds)
 
-    print(prediction_dict)
+    # print(prediction_dict)
+    return prediction_dict
 
 
 if __name__ == '__main__':
-    eval()
+    prediction_dict = eval()
 

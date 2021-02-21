@@ -3,70 +3,60 @@ from torch import nn
 import torch.nn.functional as F
 import random
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from torch.autograd import Variable
 
 
 class S2VTModel(nn.Module):
-    def __init__(self, vocab_size, max_len, dim_hidden, dim_word, dim_vid=2048, sos_id=1, eos_id=0,
-                 n_layers=1, rnn_cell='gru', rnn_dropout_p=0.2):
+    def __init__(self, vocab_size, dim_ori_feat, dim_hidden=1000, word_embed=500,
+                 rnn_dropout_p=0.2, dim_feat=500):
         super(S2VTModel, self).__init__()
-        if rnn_cell.lower() == 'lstm':
-            self.rnn_cell = nn.LSTM
-        elif rnn_cell.lower() == 'gru':
-            self.rnn_cell = nn.GRU
         # 视频层
-        self.rnn1 = self.rnn_cell(dim_vid, dim_hidden, n_layers,
-                                  batch_first=True, dropout=rnn_dropout_p)
+        self.rnn1 = nn.LSTM(dim_feat, dim_hidden, batch_first=True, dropout=rnn_dropout_p)
         # 文字层
-        self.rnn2 = self.rnn_cell(dim_hidden + dim_word, dim_hidden, n_layers,
-                                  batch_first=True, dropout=rnn_dropout_p)
+        self.rnn2 = nn.LSTM(dim_hidden + word_embed, dim_hidden, batch_first=True, dropout=rnn_dropout_p)
 
-        self.dim_vid = dim_vid
-        self.dim_output = vocab_size
+        self.dim_ori_feat = dim_ori_feat
+        self.dim_feat = dim_feat
+        self.vocab_size = vocab_size
         self.dim_hidden = dim_hidden
-        self.dim_word = dim_word
-        self.max_length = max_len
-        self.sos_id = sos_id
-        self.eos_id = eos_id
-        self.embedding = nn.Embedding(self.dim_output, self.dim_word)
+        self.word_embed = word_embed
+        self.embedding = nn.Embedding(self.vocab_size, self.word_embed)
+        self.feat_fc = nn.Linear(self.dim_ori_feat, self.dim_feat)
 
-        self.out = nn.Linear(self.dim_hidden, self.dim_output)
+        self.out = nn.Linear(self.dim_hidden, self.vocab_size)
 
-    def forward(self, feats, feat_lengths, targets, mode='train'):
+    def forward(self, feats, feat_lengths, targets=None, max_len=30, mode='train', teacher_forcing_rate=0):
         """
-        :param feats: tensor[B, T, vocab_size]
+        :param teacher_forcing_rate: int: 0~1 0: no teacher forcing
+        :param max_len: int: only works when mode is validation
+        :param feats: tensor[B, T, dim_ori_feat]
         :param feat_lengths: tensor[B, 1]
-        :param targets: tensor[B, T, 1]
+        :param targets: tensor[B, T, 1]: only works when mode is train
         :param mode: train or validation
         :return:
         """
         device = feats.device
         batch_size, n_frames, _ = feats.shape  # 获取视频feature的帧数
         # 对于视频层和文字层有两种不同的pad
-        padding_words = torch.zeros([batch_size, n_frames, self.dim_word], dtype=torch.long, device=device)
-        padding_frames = torch.zeros([batch_size, 1, self.dim_vid], dtype=torch.float, device=device)
+        padding_words = torch.zeros([batch_size, n_frames, self.word_embed], dtype=torch.long, device=device)
+        padding_frames = torch.zeros([batch_size, 1, self.dim_feat], dtype=torch.float, device=device)
 
         # Encoding Stage
-        # 把视频序列特征喂给rnn1，然后用word的pad结果之后喂给rnn2
-        state1 = None
-        state2 = None
+        # feats先压成低一点的维度
+        feats = self.feat_fc(feats)
         pack_feats = pack_padded_sequence(feats, feat_lengths, batch_first=True)
-        output1, state1 = self.rnn1(pack_feats, state1)
+        output1, state1 = self.rnn1(pack_feats)
         output1, _ = pad_packed_sequence(output1, batch_first=True, padding_value=0.0)
         input2 = torch.cat((output1, padding_words), dim=2)
-        output2, state2 = self.rnn2(input2, state2)
+        output2, state2 = self.rnn2(input2)
 
         # Decoding Stage
-        # rnn1接收pad，结果和上一个词合并之后输入到rnn2，一次循环输出一个词
-        seq_probs = []
-        seq_preds = []
+        seq_probs = []  # probability after softmax-log
+        seq_preds = []  # max probability
         if mode == 'train':
-            teacher_forcing_rate = 0.3
             previous_words = None
-            # current_words = self.embedding(torch.ones([batch_size, 1], dtype=torch.long, device=device))
             for i in range(targets.shape[1] - 1):  # <eos> not included
+                # teacher-forcing的时候用目标词来控制长度和监督
                 if previous_words is None or random.random() < teacher_forcing_rate:
-                    # 用目标词来控制长度和监督
                     current_words = self.embedding(targets[:, i])
                 else:
                     current_words = previous_words
@@ -79,9 +69,9 @@ class S2VTModel(nn.Module):
                 # 映射到vocab 求概率
                 logits = self.out(output2.squeeze(1))
                 logits = F.log_softmax(logits, dim=1)
-                # logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
+                # 得到预测值 logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
                 _, preds = torch.max(logits, 1, keepdim=True)
-                # 更新current_words
+                # 更新previous_words
                 previous_words = self.embedding(preds)
                 # 存储结果
                 seq_preds.append(preds)
@@ -93,7 +83,7 @@ class S2VTModel(nn.Module):
             current_words = self.embedding(
                 torch.ones([batch_size, 1], dtype=torch.long, device=device)
             )
-            for i in range(self.max_length):  # <eos> not included
+            for i in range(max_len):  # <eos> not included
                 # 用pad和上一次的state得到结果
                 output1, state1 = self.rnn1(padding_frames, state1)
                 # 结果和下一个目标词合并
@@ -103,7 +93,7 @@ class S2VTModel(nn.Module):
                 # 映射到vocab 求概率
                 logits = self.out(output2.squeeze(1))
                 logits = F.log_softmax(logits, dim=1)
-                # logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
+                # 得到预测值 logits: [batch_size, vocab_size] -> preds: [batch_size, 1]
                 _, preds = torch.max(logits, 1, keepdim=True)
                 # 更新current_words
                 current_words = self.embedding(preds)
@@ -114,6 +104,7 @@ class S2VTModel(nn.Module):
             seq_probs = torch.cat(seq_probs, 1)
             seq_preds = torch.cat(seq_preds, 1)
             seq_preds = pad_after_eos(seq_preds)
+        # assert 1==0
         return seq_probs, seq_preds
 
 

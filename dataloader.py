@@ -9,13 +9,19 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class VideoDataset(Dataset):
-    def __init__(self, captions_file, feat_path):
+    def __init__(self, captions_file, feat_path, mode='train'):
         with open(captions_file, encoding='utf-8') as f:
             data = json.load(f)
             self.word2ix = data['word2ix']
             self.ix2word = data['ix2word']
             self.captions = data['captions']  # [name, caption]
-        self.feat_paths = [i for i in plb.Path(feat_path).glob('*.npy')]
+            self.splits = data['splits']
+        # filter the train/test/valid split
+        all_feat_paths = [i for i in plb.Path(feat_path).glob('*.npy')]
+        self.feat_paths = []
+        for path in all_feat_paths:
+            if path.stem in self.splits[mode]:
+                self.feat_paths.append(path)
 
     def __getitem__(self, index):
         """

@@ -3,6 +3,7 @@ import numpy as np
 import re
 import json
 from collections import Counter
+import random
 from tqdm import tqdm
 
 
@@ -55,6 +56,7 @@ def parse_csv(csv_file, captions_file):
         counter.update(sentence)  # put words into a set
         captions.append(['<sos>'] + sentence + ['<eos>'])
 
+
     # build vocab
     word2ix, ix2word = build_vocab(counter)
 
@@ -69,12 +71,23 @@ def parse_csv(csv_file, captions_file):
             caption_dict[name] = []
         caption_dict[name].append(cap)
 
+    # 划分数据集
+    data_split = [1400, 450, -1]  # train test valid
+    vid_names = list(caption_dict.keys())
+    random.shuffle(vid_names)
+    train_split = vid_names[:data_split[0]]
+    test_split = vid_names[data_split[0]:data_split[0] + data_split[1]]
+    valid_split = vid_names[data_split[0] + data_split[1]:]
+
+    print("train:{} test:{} valid:{}".format(len(train_split), len(test_split), len(valid_split)))
+
     # save files
     with open(captions_file, 'w+', encoding='utf-8') as f:
         json.dump(
             {'word2ix': word2ix,
              'ix2word': ix2word,
-             'captions': caption_dict}, f
+             'captions': caption_dict,
+             'splits': {'train': train_split, 'test': test_split, 'valid': valid_split}}, f
         )
 
 
@@ -96,8 +109,8 @@ def human_test(test_num, captions_file):
 
 
 if __name__ == '__main__':
-    # parse_csv(
-    #     csv_file=r'./data/video_corpus.csv',
-    #     captions_file=r'./data/captions.json'
-    # )
-    human_test(5, captions_file=r'./data/captions.json')
+    parse_csv(
+        csv_file=r'./data/video_corpus.csv',
+        captions_file=r'./data/captions.json'
+    )
+    # human_test(5, captions_file=r'./data/captions.json')

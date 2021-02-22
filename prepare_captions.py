@@ -24,9 +24,10 @@ def build_vocab(all_words, min_feq=3):
     return word2ix, ix2word
 
 
-def parse_csv(csv_file, captions_file):
+def parse_csv(csv_file, captions_file, clean_only=False):
     """
     解析MSVD数据结构的csv文件
+    :param clean_only: 是否只采用clean的数据
     :param csv_file: path of MSVD videos
     :param captions_file: 生成的caption保存路径
     :return: None
@@ -36,6 +37,8 @@ def parse_csv(csv_file, captions_file):
     data = pd.DataFrame(file)
     data = data.dropna(axis=0)
     eng_data = data[data['Language'] == 'English']
+    if clean_only is True:
+        eng_data = eng_data[eng_data['Source'] == 'clean']
     print('There are totally {} english descriptions'.format(len(eng_data)))
 
     # get valid captions and its video ids
@@ -111,6 +114,7 @@ def human_test(test_num, captions_file):
 if __name__ == '__main__':
     parse_csv(
         csv_file=r'./data/video_corpus.csv',
-        captions_file=r'./data/captions.json'
+        captions_file=r'./data/captions.json',
+        clean_only=True
     )
     # human_test(5, captions_file=r'./data/captions.json')

@@ -14,6 +14,7 @@ from tensorboardX import SummaryWriter
 
 from dataloader import VideoDataset, collate_fn
 from S2VTModel import S2VTModel
+from utils import LengthCriterion
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 writer = SummaryWriter()
@@ -24,12 +25,15 @@ class Opt:
     max_len = 30
     dim_hidden = 1000
     dim_word = 500
-    lr = 0.0005
-    EPOCHS = 200
+    lr = 0.0004
+    EPOCHS = 90
     save_freq = 10
     save_path = './checkpoint'
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
     feat_dim = 4096
+    # optimizer config
+    learning_rate_decay_every = 50
+    learning_rate_decay_rate = 0.8
 
 
 def get_pad_lengths(data, pad_id=0):
@@ -63,12 +67,17 @@ def train():
         opt.feat_dim,
         rnn_dropout_p=0
     ).to(device)
-    # torch.save(model, 'test.pth')  # check
     optimizer = optim.Adam(
         model.parameters(),
         lr=opt.lr
     )
-    criterion = nn.NLLLoss()
+    lr_scheduler = optim.lr_scheduler.StepLR(
+        optimizer,
+        step_size=opt.learning_rate_decay_every,
+        gamma=opt.learning_rate_decay_rate
+    )
+    # criterion = nn.NLLLoss()
+    criterion = LengthCriterion()
 
     ###
     ### start training
@@ -84,11 +93,12 @@ def train():
             model.train()
 
             feat_lengths = get_pad_lengths(feats)
-            probs, preds = model(feats, feat_lengths, targets)
+            probs, preds = model(feats, feat_lengths, targets, teacher_forcing_rate=0)
             # probs: [batch_size, label_max, vocab_size] targets: [batch_size, label_max]
             # print(probs.shape, targets.shape)
-            loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
-                             , targets[:, :-1].contiguous().view(-1))
+            # loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
+            #                  , targets[:, :-1].contiguous().view(-1))
+            loss = criterion(probs, targets, feat_lengths)
 
             loss.backward()
             optimizer.step()
@@ -109,8 +119,9 @@ def train():
             with torch.no_grad():
                 probs, preds = model(feats, feat_lengths, targets)
 
-            loss = criterion(probs.contiguous().view(probs.shape[0] * probs.shape[1], -1)
-                             , targets[:, :-1].contiguous().view(-1))
+            # loss = criterion(probs.contiguous().view(probs.shape[0] * probs.shape[1], -1)
+            #                  , targets[:, :-1].contiguous().view(-1))
+            loss = criterion(probs, targets, feat_lengths)
             test_running_loss += loss.item()
             loss_count += 1
         test_running_loss /= loss_count
@@ -130,7 +141,6 @@ def train():
 if __name__ == '__main__':
     train()
 
-# TODO(Kamino): METEOR评估指标
 # TODO(Kamino): Optical Flow的部分
 # TODO(Kamino): beam_search
 

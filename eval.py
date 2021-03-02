@@ -7,7 +7,6 @@ import json
 import re
 import random
 from tqdm import tqdm
-from tensorboardX import SummaryWriter
 import sys
 
 from dataloader import VideoDataset, collate_fn
@@ -23,7 +22,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"./checkpoint/21_02_21_12_43_13-final.pth"
+    model_path = r"./checkpoint/21_03_02_10_00_51-50.pth"
     csv_file = r'./data/video_corpus.csv'
     batch_size = 8
 
@@ -32,7 +31,7 @@ def eval():
     opt = Opt()
 
     # prepare data
-    validset = VideoDataset('data/captions.json', 'data/feats', mode='test')
+    validset = VideoDataset('data/captions.json', 'data/feats', mode='train')
     valid_loader = torch.utils.data.DataLoader(validset, batch_size=opt.batch_size, shuffle=False,
                                                collate_fn=collate_fn)
     word2ix = validset.word2ix
@@ -71,7 +70,7 @@ def eval():
     return prediction_dict
 
 
-def caption_to_coco_gts(csv_file):
+def caption_to_coco_gts(csv_file, clean_only=False):
     # gts = {
     #     '184321': [
     #         {u'image_id': '184321', u'cap_id': 0, u'caption': u'A train traveling down tracks next to lights.',
@@ -89,6 +88,8 @@ def caption_to_coco_gts(csv_file):
     data = pd.DataFrame(file)
     data = data.dropna(axis=0)
     eng_data = data[data['Language'] == 'English']
+    if clean_only is True:
+        eng_data = eng_data[eng_data['Source'] == 'clean']
 
     gts = {}
     max_cap_ids = {}
@@ -201,7 +202,7 @@ class COCOScorer(object):
 
 if __name__ == '__main__':
     prediction_dict = eval()
-    gts = caption_to_coco_gts(r'./data/video_corpus.csv')
+    gts = caption_to_coco_gts(r'./data/video_corpus.csv', clean_only=True)
     samples, IDs = pred_to_coco_samples_IDs(prediction_dict)
 
     scorer = COCOScorer()

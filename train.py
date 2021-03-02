@@ -95,7 +95,6 @@ def train():
             feat_lengths = get_pad_lengths(feats)
             probs, preds = model(feats, feat_lengths, targets, teacher_forcing_rate=0)
             # probs: [batch_size, label_max, vocab_size] targets: [batch_size, label_max]
-            # print(probs.shape, targets.shape)
             # loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
             #                  , targets[:, :-1].contiguous().view(-1))
             loss = criterion(probs, targets, feat_lengths)
@@ -105,6 +104,7 @@ def train():
 
             train_running_loss += loss.item()
             loss_count += 1
+
         train_running_loss /= loss_count
         writer.add_scalar('train_loss', train_running_loss, global_step=epoch)
 
@@ -124,6 +124,7 @@ def train():
             loss = criterion(probs, targets, feat_lengths)
             test_running_loss += loss.item()
             loss_count += 1
+
         test_running_loss /= loss_count
         writer.add_scalar('valid_loss', test_running_loss, global_step=epoch)
         print("train loss:{} valid loss: {}".format(train_running_loss, test_running_loss))
@@ -141,7 +142,7 @@ def train():
 if __name__ == '__main__':
     train()
 
-# TODO(Kamino): Optical Flow的部分
 # TODO(Kamino): beam_search
+# TODO(Kamino): 在val_loss不下降之后停止
 
 

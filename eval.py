@@ -42,7 +42,7 @@ def eval():
     model = torch.load(opt.model_path).to(device)
 
     ###
-    ### start validation
+    ### start test
     ###
 
     prediction_dict = {}

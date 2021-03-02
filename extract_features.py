@@ -119,7 +119,7 @@ if __name__ == '__main__':
                         help="The interval when extract frames from videos")
 
     args = parser.parse_args()
-    args = vars(args)  # 经常这样使用来转换成字典
+    args = vars(args)  # to dict
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args['gpu'])
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -26,10 +26,10 @@ def build_vocab(all_words, min_feq=1):
 
 def parse_csv(csv_file, captions_file, clean_only=False):
     """
-    解析MSVD数据结构的csv文件
-    :param clean_only: 是否只采用clean的数据
+    parse the .csv file in MSVD dataset
+    :param clean_only: only choose clean data
     :param csv_file: path of MSVD videos
-    :param captions_file: 生成的caption保存路径
+    :param captions_file: save path
     :return: None
     """
     # read csv
@@ -45,7 +45,6 @@ def parse_csv(csv_file, captions_file, clean_only=False):
     captions = []
     counter = Counter()
     filenames = []
-    """遍历所有的英文描述，找到feature包含的video对应的caption，存储。"""
     for _, name, start, end, sentence in tqdm(eng_data[['VideoID', 'Start', 'End', 'Description']].itertuples(),
                                               desc='reading captions'):
         # get id
@@ -58,7 +57,6 @@ def parse_csv(csv_file, captions_file, clean_only=False):
         sentence = re.sub(r'[.!,;?:]', ' ', sentence).split()
         counter.update(sentence)  # put words into a set
         captions.append(['<sos>'] + sentence + ['<eos>'])
-
 
     # build vocab
     word2ix, ix2word = build_vocab(counter)
@@ -74,7 +72,7 @@ def parse_csv(csv_file, captions_file, clean_only=False):
             caption_dict[name] = []
         caption_dict[name].append(cap)
 
-    # 划分数据集
+    # split dataset
     data_split = [1400, 450, -1]  # train valid test
     vid_names = list(caption_dict.keys())
     random.shuffle(vid_names)
@@ -154,7 +152,7 @@ def parse_MSR_VTT(train_source_file, test_source_file, captions_file):
 
 def human_test(test_num, captions_file):
     """
-    随机抽取test_num个Caption，手动查看是否对应成功
+    randomly select test_num captions to see if the code work well
     :param test_num:
     :param captions_file:
     :return:

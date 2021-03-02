@@ -25,7 +25,7 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         """
-        抽取一个feat，随机一个对应的caption出来
+        select a feature and select a random corresponding caption
         :param index: index of data
         :return: tuple(tensor(img_feat), tensor(label), str(ID))
         """
@@ -42,7 +42,7 @@ class VideoDataset(Dataset):
 
 def collate_fn(data):
     """
-    batch内根据feat的长度进行排序，并且pad成同样的大小
+    sort according to length of feature, and pad to same size in a batch.
     :param data: list[batch_size, list[feat, label, ID]]
     :return: tensor[batch_size, feat_max, 2048], tensor[batch_size, label_max], list[batch_size]
     """

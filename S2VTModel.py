@@ -79,7 +79,7 @@ class S2VTModel(nn.Module):
             # 用cat转成tensor
             seq_probs = torch.cat(seq_probs, 1)
             seq_preds = torch.cat(seq_preds, 1)
-        elif mode == 'validation':
+        elif mode == 'test':
             current_words = self.embedding(
                 torch.ones([batch_size, 1], dtype=torch.long, device=device)
             )

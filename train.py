@@ -55,7 +55,7 @@ def train():
     # prepare data
     trainset = VideoDataset('data/captions.json', 'data/feats')
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True, collate_fn=collate_fn)
-    testset = VideoDataset('data/captions.json', 'data/feats', mode='test')
+    testset = VideoDataset('data/captions.json', 'data/feats', mode='valid')
     test_loader = torch.utils.data.DataLoader(testset, batch_size=opt.batch_size, shuffle=False, collate_fn=collate_fn)
     word2ix = trainset.word2ix
     ix2word = trainset.ix2word
@@ -108,7 +108,7 @@ def train():
         train_running_loss /= loss_count
         writer.add_scalar('train_loss', train_running_loss, global_step=epoch)
 
-        # test
+        # validate
         test_running_loss = 0.0
         loss_count = 0
         for index, (feats, targets, IDs) in enumerate(test_loader):
@@ -125,8 +125,8 @@ def train():
             test_running_loss += loss.item()
             loss_count += 1
         test_running_loss /= loss_count
-        writer.add_scalar('test_loss', test_running_loss, global_step=epoch)
-        print("train loss:{} test loss: {}".format(train_running_loss, test_running_loss))
+        writer.add_scalar('valid_loss', test_running_loss, global_step=epoch)
+        print("train loss:{} valid loss: {}".format(train_running_loss, test_running_loss))
 
         # save checkpoint
         # if epoch % opt.save_freq == 0 and epoch != 0:

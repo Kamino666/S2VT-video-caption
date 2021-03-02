@@ -46,12 +46,12 @@ def eval():
     ###
 
     prediction_dict = {}
-    for index, (feats, targets, IDs) in enumerate(tqdm(valid_loader, desc="validation")):
+    for index, (feats, targets, IDs) in enumerate(tqdm(valid_loader, desc="test")):
         # get prediction and cal loss
         model.eval()
         feat_lengths = get_pad_lengths(feats)
         with torch.no_grad():
-            probs, preds = model(feats, feat_lengths, targets=targets, mode='validation')
+            probs, preds = model(feats, feat_lengths, targets=targets, mode='test')
         # assert 1 == 0
         # save result
         for ID, pred in zip(IDs, preds):

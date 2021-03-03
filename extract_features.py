@@ -133,3 +133,4 @@ if __name__ == '__main__':
     )
 
 # TODO(Kamino): 全面导入命令行模式
+# TODO(Kamino): 在目前的基础上进行调参（正则化、归一化、dropout等）

@@ -7,12 +7,14 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 class S2VTModel(nn.Module):
     def __init__(self, vocab_size, dim_ori_feat, dim_hidden=1000, word_embed=500,
-                 rnn_dropout_p=0.2, dim_feat=500):
+                 rnn_dropout_p=0.2, dim_feat=500, num_layers=1, bidirectional=False):
         super(S2VTModel, self).__init__()
         # 视频层
-        self.rnn1 = nn.LSTM(dim_feat, dim_hidden, batch_first=True, dropout=rnn_dropout_p)
+        self.rnn1 = nn.LSTM(dim_feat, dim_hidden, batch_first=True, dropout=rnn_dropout_p
+                            , num_layers=num_layers, bidirectional=bidirectional)
         # 文字层
-        self.rnn2 = nn.LSTM(dim_hidden + word_embed, dim_hidden, batch_first=True, dropout=rnn_dropout_p)
+        self.rnn2 = nn.LSTM(dim_hidden + word_embed, dim_hidden, batch_first=True, dropout=rnn_dropout_p
+                            , num_layers=num_layers, bidirectional=bidirectional)
 
         self.dim_ori_feat = dim_ori_feat
         self.dim_feat = dim_feat
@@ -27,7 +29,7 @@ class S2VTModel(nn.Module):
     def forward(self, feats, feat_lengths, targets=None, max_len=30, mode='train', teacher_forcing_rate=0):
         """
         :param teacher_forcing_rate: int: 0~1 0: no teacher forcing
-        :param max_len: int: only works when mode is validation
+        :param max_len: int: only works when validation
         :param feats: tensor[B, T, dim_ori_feat]
         :param feat_lengths: tensor[B, 1]
         :param targets: tensor[B, T, 1]: only works when mode is train

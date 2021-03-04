@@ -105,25 +105,30 @@ class EarlyStopping:
         if self.verbose:
             self.trace_func(
                 f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), self.path)
+        # torch.save(model.state_dict(), self.path)
+        torch.save(model, self.path)
         self.val_loss_min = val_loss
 
-# # 暂时不使用
-# class TeacherForcingScheduler:
-#     def __init__(self, rate_list, step_size=30):
-#         """
-#         :param rate_list: 范围从0到1, 列表形式
-#         :param step_size: 每经过step_size个step后，跳到下一个rate
-#         """
-#         self.rate_list = rate_list
-#         self.step_size = step_size
-#         self.length = len(rate_list)
-#         self.global_step = 0
-#
-#     def step(self):
-#         if self.global_step + 1 >= self.length:
-#             return
-#         self.global_step += 1
-#
-#     def get(self):
-#         return self.rate_list[self.global_step]
+
+# 暂时不使用
+class CurriculumLearning:
+    def __init__(self, init_rate, step_size=30, reduct_per=0.5, vanish_rate=0.1):
+        assert 0 <= vanish_rate <= 1
+        assert vanish_rate < init_rate <= 1
+        self.rate = init_rate
+        self.step_size = step_size
+        self.reduct = reduct_per
+        self.step = 0
+        self.vanish_rate = vanish_rate
+
+    def step_ahead(self):
+        self.step += 1
+        if self.step == self.step_size:  # if come to step_size
+            self.step = 0
+            self.rate *= self.reduct
+            if self.rate <= self.vanish_rate:
+                self.rate = 0
+
+    def get(self):
+        return self.rate
+

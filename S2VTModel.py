@@ -39,7 +39,8 @@ class S2VTModel(nn.Module):
         device = feats.device
         batch_size, n_frames, _ = feats.shape  # 获取视频feature的帧数
         # 对于视频层和文字层有两种不同的pad
-        padding_words = torch.zeros([batch_size, n_frames, self.word_embed], dtype=torch.long, device=device)
+        # padding_words = torch.zeros([batch_size, n_frames, self.word_embed], dtype=torch.long, device=device)
+        padding_words = torch.zeros([batch_size, n_frames, self.word_embed], dtype=torch.float, device=device)
         padding_frames = torch.zeros([batch_size, 1, self.dim_feat], dtype=torch.float, device=device)
 
         # Encoding Stage

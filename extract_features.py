@@ -78,10 +78,45 @@ def extract_feats(frame_path, feats_path, interval, model, video_name):
     np.save(os.path.join(feats_path, video_name + ".npy"), feats)
 
 
-def extract(video_path, feats_path, model, interval=10):
+def fix_frame_extract(frame_path, feats_path, frames_num, model, video_name):
+    # load model
+    C, H, W = 3, 224, 224
+    if model == 'resnet152':
+        model = pretrainedmodels.resnet152(pretrained='imagenet')
+    elif model == 'vgg16':
+        model = pretrainedmodels.vgg16(pretrained='imagenet')
+    elif model == 'inception_v4':
+        C, H, W = 3, 299, 299
+        model = pretrainedmodels.inceptionv4(pretrained='imagenet')
+    model.last_linear = utils.Identity()
+    model = model.to(device)
+    model.eval()
+    load_image_fn = utils.LoadTransformImage(model)
+
+    # load data
+    img_list = sorted(frame_path.glob('*.jpg'))
+    # get index
+    samples_ix = np.linspace(0, len(img_list)-1, frames_num).astype(int)
+    img_list = [img_list[i] for i in samples_ix]
+    # build tensor
+    imgs = torch.zeros([len(img_list), C, H, W])
+    for i in range(len(img_list)):
+        img = load_image_fn(img_list[i])
+        imgs[i] = img
+    imgs = imgs.to(device)
+    with torch.no_grad():
+        feats = model(imgs)
+    feats = feats.cpu().numpy()
+    # save
+    np.save(os.path.join(feats_path, video_name + ".npy"), feats)
+
+
+def extract(video_path, feats_path, model, mode='fix', frames_num=80, interval=10):
     """
+    :param interval: only works in mode 'free'
+    :param frames_num: only works in mode 'fix'
+    :param mode: 'fix': extract a fix number of frames, 'free': extract feat every interval num
     :param model: (str) name of model
-    :param interval: (str) The interval when extract frames from videos
     :param feats_path: (str) The path(folder) to store extracted features
     :param video_path: (str) The path of videos
     :return: None
@@ -102,13 +137,18 @@ def extract(video_path, feats_path, model, interval=10):
         # get frames to a temp dir
         extract_frames(str(video), os.path.join(temp_path))
         # get features
-        extract_feats(temp_path, feats_path, interval, model, video.stem)
+        if mode == 'fix':
+            fix_frame_extract(temp_path, feats_path, frames_num, model, video.stem)
+        elif mode == 'free':
+            extract_feats(temp_path, feats_path, interval, model, video.stem)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--video_path', required=True, type=str,
                         help="The path of MSVD or MSR-VTT videos")
+    parser.add_argument('--mode', required=True, type=str,
+                        help="fix or free.\n'fix': extract a fix number of frames. \n'free': extract feat every interval num")
     parser.add_argument('--feat_path', default='./data/feats', type=str,
                         help="The path(folder) to store extracted features")
     parser.add_argument('--model', default='vgg16', choices=['vgg16', 'resnet152', 'inception_v4'], type=str,
@@ -117,6 +157,8 @@ if __name__ == '__main__':
                         help="GPU device number(don't support multi GPU)")
     parser.add_argument('--interval', default=10, type=int,
                         help="The interval when extract frames from videos")
+    parser.add_argument('--frames_num', default=80, type=int,
+                        help="The fix number of frames to be extracted from each video")
 
     args = parser.parse_args()
     args = vars(args)  # to dict
@@ -129,8 +171,9 @@ if __name__ == '__main__':
         video_path=args['video_path'],
         feats_path=args['feat_path'],
         model=args['model'],
-        interval=args['interval']
+        interval=args['interval'],
+        frames_num=args['frames_num'],
+        mode=args['mode'],
     )
 
 # TODO(Kamino): 全面导入命令行模式
-# TODO(Kamino): 在目前的基础上进行调参（正则化、归一化、dropout等）

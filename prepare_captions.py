@@ -10,10 +10,10 @@ from tqdm import tqdm
 def build_vocab(all_words, min_feq=1):
     # use collections.Counter() to build vocab
     all_words = all_words.most_common()
-    word2ix = {'<pad>': 0, '<sos>': 1, '<eos>': 2, '<unk>': 3}
-    for ix, (word, feq) in enumerate(tqdm(all_words, desc='building vocab'), start=4):
+    word2ix = {'<pad>': 0, '<unk>': 1}
+    for ix, (word, feq) in enumerate(tqdm(all_words, desc='building vocab'), start=2):
         if feq < min_feq:
-            break
+            continue
         word2ix[word] = ix
     ix2word = {v: k for k, v in word2ix.items()}
 
@@ -24,9 +24,10 @@ def build_vocab(all_words, min_feq=1):
     return word2ix, ix2word
 
 
-def parse_csv(csv_file, captions_file, clean_only=False):
+def parse_csv(csv_file, captions_file, gts_file, clean_only=False):
     """
     parse the .csv file in MSVD dataset
+    :param gts_file: save path
     :param clean_only: only choose clean data
     :param csv_file: path of MSVD videos
     :param captions_file: save path
@@ -45,24 +46,42 @@ def parse_csv(csv_file, captions_file, clean_only=False):
     captions = []
     counter = Counter()
     filenames = []
+    gts = {}  # for eval.py
+    max_cap_ids = {}  # for eval.py
     for _, name, start, end, sentence in tqdm(eng_data[['VideoID', 'Start', 'End', 'Description']].itertuples(),
                                               desc='reading captions'):
         # get id
         file_name = name + '_' + str(start) + '_' + str(end)  # + '.avi'
-        # if file_name not in v2id:
-        #     continue
         filenames.append(file_name)
         # process caption
-        sentence = sentence.lower()
-        sentence = re.sub(r'[.!,;?:]', ' ', sentence).split()
-        counter.update(sentence)  # put words into a set
-        captions.append(['<sos>'] + sentence + ['<eos>'])
+        tokenized = sentence.lower()
+        tokenized = re.sub(r'[~\\/().!,;?:]', ' ', tokenized).split()
+        tokenized = ['<sos>'] + tokenized + ['<eos>']
+        counter.update(tokenized)  # put words into a set
+        captions.append(tokenized)
+        # gts
+        if file_name in gts:
+            max_cap_ids[file_name] += 1
+            gts[file_name].append({
+                u'image_id': file_name,
+                u'cap_id': max_cap_ids[file_name],
+                u'caption': sentence,
+                u'tokenized': tokenized
+            })
+        else:
+            max_cap_ids[file_name] = 0
+            gts[file_name] = [{
+                u'image_id': file_name,
+                u'cap_id': 0,
+                u'caption': sentence,
+                u'tokenized': tokenized
+            }]
 
     # build vocab
     word2ix, ix2word = build_vocab(counter)
 
-    # turn words into index (3 is <unk>)
-    captions = [[word2ix.get(w, 3) for w in caption]
+    # turn words into index (1 is <unk>)
+    captions = [[word2ix.get(w, word2ix['<unk>']) for w in caption]
                 for caption in tqdm(captions, desc='turing words into index')]
 
     # build dict   filename: [captions]
@@ -90,9 +109,11 @@ def parse_csv(csv_file, captions_file, clean_only=False):
              'captions': caption_dict,
              'splits': {'train': train_split, 'valid': valid_split, 'test': test_split}}, f
         )
+    with open(gts_file, 'w+', encoding='utf-8') as f:
+        json.dump({'gts': gts}, f)
 
 
-def parse_MSR_VTT(train_source_file, test_source_file, captions_file):
+def parse_msr_vtt(train_source_file, test_source_file, captions_file, gts_file):
     # read data
     with open(train_source_file, encoding='utf-8') as f:
         data = json.load(f)
@@ -105,19 +126,40 @@ def parse_MSR_VTT(train_source_file, test_source_file, captions_file):
     captions = []
     counter = Counter()
     filenames = []
+    gts = {}  # for eval.py
+    max_cap_ids = {}  # for eval.py
     for item in sentences:
-        filenames.append(item['video_id'])
+        file_name = item['video_id']
+        filenames.append(file_name)
         # process caption
-        sentence = item['caption'].lower()
-        sentence = re.sub(r'[.!,;?:]', ' ', sentence).split()
-        counter.update(sentence)  # put words into a set
-        captions.append(['<sos>'] + sentence + ['<eos>'])
+        sentence = ['<sos>'] + item['caption'] + ['<eos>']
+        tokenized = sentence.lower()
+        tokenized = re.sub(r'[.!,;?:]', ' ', tokenized).split()
+        counter.update(tokenized)  # put words into a set
+        captions.append(tokenized)
+        # gts
+        if file_name in gts:
+            max_cap_ids[file_name] += 1
+            gts[file_name].append({
+                u'image_id': file_name,
+                u'cap_id': max_cap_ids[file_name],
+                u'caption': sentence,
+                u'tokenized': tokenized
+            })
+        else:
+            max_cap_ids[file_name] = 0
+            gts[file_name] = [{
+                u'image_id': file_name,
+                u'cap_id': 0,
+                u'caption': sentence,
+                u'tokenized': tokenized
+            }]
 
     # build vocab
     word2ix, ix2word = build_vocab(counter)
 
-    # turn words into index (3 is <unk>)
-    captions = [[word2ix.get(w, 3) for w in caption]
+    # turn words into index (1 is <unk>)
+    captions = [[word2ix.get(w, word2ix['<unk>']) for w in caption]
                 for caption in tqdm(captions, desc='turing words into index')]
 
     # build dict   filename: [captions]
@@ -148,38 +190,26 @@ def parse_MSR_VTT(train_source_file, test_source_file, captions_file):
              'captions': caption_dict,
              'splits': {'train': train_split, 'valid': valid_split, 'test': test_split}}, f
         )
-
-
-def human_test(test_num, captions_file):
-    """
-    randomly select test_num captions to see if the code work well
-    :param test_num:
-    :param captions_file:
-    :return:
-    """
-    import random
-    with open(captions_file, encoding='utf-8') as f:
-        data = json.load(f)
-    for i in range(test_num):
-        sample_video = random.choice(list(data['captions'].keys()))
-        sample_cap = random.choice(data['captions'][sample_video])
-        sample_cap = [data['ix2word'][str(w)] for w in sample_cap]
-        print("[{}]: ".format(sample_video), ' '.join(sample_cap))
+    with open(gts_file, 'w+', encoding='utf-8') as f:
+        json.dump({'gts': gts}, f)
 
 
 if __name__ == '__main__':
-    # parse_csv(
-    #     csv_file=r'./data/video_corpus.csv',
-    #     captions_file=r'./data/captions.json',
-    #     clean_only=True
-    # )
-    parse_MSR_VTT(
-        train_source_file=r"train_val_videodatainfo.json",
-        test_source_file=r"test_videodatainfo.json",
-        captions_file=r'./data/captions_MSR_VTT.json'
+    parse_csv(
+        csv_file=r'./data/video_corpus.csv',
+        captions_file=r'./data/captions.json',
+        gts_file=r"./data/gts.json",
+        clean_only=True
     )
-    # human_test(5, captions_file=r'./data/captions.json')
+    # parse_msr_vtt(
+    #     train_source_file=r"train_val_videodatainfo.json",
+    #     test_source_file=r"test_videodatainfo.json",
+    #     gts_file=r"./data/gts.json",
+    #     captions_file=r'./data/captions_MSR_VTT.json'
+    # )
+
 
 
 # TODO(Kamino): 更改注释成英文
 # TODO(Kamino): 写Readme
+# TODO(Kamino): 走通MSR-VTT

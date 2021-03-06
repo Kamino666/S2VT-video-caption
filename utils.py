@@ -7,7 +7,7 @@ class MaskCriterion(nn.Module):
 
     def __init__(self):
         super(MaskCriterion, self).__init__()
-        self.loss_fn = nn.NLLLoss(reduce=False)
+        self.loss_fn = nn.CrossEntropyLoss()
 
     def forward(self, logits, target, mask):
         """
@@ -15,43 +15,13 @@ class MaskCriterion(nn.Module):
         target: shape of (N, seq_len)
         mask: shape of (N, seq_len)
         """
-        # truncate to the same size
-        batch_size = logits.shape[0]
-        target = target[:, :logits.shape[1]]
-        mask = mask[:, :logits.shape[1]]
-        logits = logits.contiguous().view(-1, logits.shape[2])
-        target = target.contiguous().view(-1)
-        mask = mask.contiguous().view(-1)
-        loss = self.loss_fn(logits, target)
-        output = torch.sum(loss * mask) / batch_size
-        return output
-
-
-class LengthCriterion(nn.Module):
-
-    def __init__(self):
-        super(LengthCriterion, self).__init__()
-        self.loss_fn = nn.NLLLoss()
-
-    def forward(self, probs, targets, lengths):
-        """
-        probs: shape of (N, seq_len, vocab_size)
-        targets: shape of (N, seq_len)
-        lengths: shape of (N, 1)
-        """
-        # truncate to the same size
-        batch_size = probs.shape[0]
-        seq_len = probs.shape[1]
-
-        probs = probs.contiguous().view(probs.shape[0] * probs.shape[1], -1)
-        targets = targets[:, :-1].contiguous().view(-1)
-        loss = self.loss_fn(probs, targets)
-
-        mask = torch.zeros([batch_size, seq_len], device=probs.device)
-        for mask_item, length in zip(mask, lengths):
-            mask_item[:length] = 1
-
-        output = torch.sum(loss * mask) / batch_size
+        item_sum = logits.shape[0]*logits.shape[1]  # N * seq_len
+        target, mask = target[:, 1:], mask[:, 1:]
+        # loss [N*seq_len]
+        loss = self.loss_fn(logits.contiguous().view(item_sum, -1),
+                            target.contiguous().view(-1))
+        mask_loss = loss * mask.contiguous().view(-1)
+        output = torch.sum(mask_loss) / torch.sum(mask)
         return output
 
 
@@ -108,27 +78,4 @@ class EarlyStopping:
         # torch.save(model.state_dict(), self.path)
         torch.save(model, self.path)
         self.val_loss_min = val_loss
-
-
-# 暂时不使用
-class CurriculumLearning:
-    def __init__(self, init_rate, step_size=30, reduct_per=0.5, vanish_rate=0.1):
-        assert 0 <= vanish_rate <= 1
-        assert vanish_rate < init_rate <= 1
-        self.rate = init_rate
-        self.step_size = step_size
-        self.reduct = reduct_per
-        self.step = 0
-        self.vanish_rate = vanish_rate
-
-    def step_ahead(self):
-        self.step += 1
-        if self.step == self.step_size:  # if come to step_size
-            self.step = 0
-            self.rate *= self.reduct
-            if self.rate <= self.vanish_rate:
-                self.rate = 0
-
-    def get(self):
-        return self.rate
 

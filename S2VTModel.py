@@ -125,3 +125,104 @@ def pad_after_eos(preds):
                 seq[i:] = 0
                 break
     return preds
+
+
+class S2VT(nn.Module):
+    def __init__(self, vocab_size, feat_dim, length, dim_hid=500, dim_embed=500, feat_dropout=0, rnn_dropout=0,
+                 out_dropout=0, num_layers=1, bidirectional=False, rnn_type='lstm', sos_ix=2):
+        super(S2VT, self).__init__()
+        # RNN
+        if rnn_type.lower() == 'lstm':
+            rnn_cell = nn.LSTM
+        else:
+            rnn_cell = nn.GRU
+        self.vid_rnn = rnn_cell(dim_hid, dim_hid, batch_first=True, num_layers=num_layers,
+                                bidirectional=bidirectional, dropout=rnn_dropout)
+        self.word_rnn = rnn_cell(dim_hid + dim_embed, dim_hid, batch_first=True, num_layers=num_layers,
+                                 bidirectional=bidirectional, dropout=rnn_dropout)
+        # other layers
+        self.feat_drop = nn.Dropout(p=feat_dropout)
+        self.out_drop = nn.Dropout(p=out_dropout)
+        self.feat_linear = nn.Linear(feat_dim, dim_hid)
+        self.out_linear = nn.Linear(dim_hid, vocab_size)
+        self.embedding = nn.Embedding(vocab_size, dim_hid)
+        # save parameters
+        self.feat_dim = feat_dim
+        self.length = length
+        self.dim_hid = dim_hid
+        self.dim_embed = dim_embed
+        self.sos_ix = sos_ix
+        self.vocab_size = vocab_size
+
+    def forward(self, feats, targets=None, mode='train'):
+        device = feats.device
+        batch_size = feats.shape[0]
+
+        # feats [B, L, feat_dim]
+        feats = self.feat_drop(feats)
+        # feats [B, L, dim_hid]
+        feats = self.feat_linear(feats)
+        # pad_feats [B, 2L-1, dim_hid]
+        padding = torch.zeros([batch_size, self.length - 1, self.dim_hid], device=device)
+        pad_feats = torch.cat([feats, padding], dim=1)
+        # RNN1
+        output1, state1 = self.vid_rnn(pad_feats)
+
+        if mode == 'train':
+            # targets [B, L-1, 1] embed [B, L-1, hid]
+            embed = self.embedding(targets)
+            padding = torch.zeros([batch_size, self.length, self.dim_embed], dtype=torch.long, device=device)
+            pad_embed = torch.cat([padding, embed], dim=1)
+            # input2 [B, 2L-1, 2hid]
+            input2 = torch.cat([pad_embed, output1], dim=2)
+            # RNN2
+            output2, state2 = self.word_rnn(input2)
+            result = output2[:, self.length:, :]
+            result = self.out_drop(result)
+            result = self.out_linear(result)
+            return result
+        else:
+            """Encoding Stage of word_rnn layer"""
+            padding = torch.zeros([batch_size, self.length, self.dim_hid], device=device)
+            input2 = torch.cat([padding, output1[:, :self.length, :]], dim=2)
+            _, state2 = self.word_rnn(input2)
+
+            """Decoding Stage of word_rnn layer"""
+            sos = (self.sos_ix * torch.ones([batch_size], dtype=torch.long)).to(device)
+            sos = self.embedding(sos).unsqueeze(dim=1)
+            input2 = torch.cat([sos, output1[:, self.length, :].unsqueeze(dim=1)], dim=2)
+            # output2 [B, 1, hid]
+            output2, state2 = self.word_rnn(input2, state2)
+            # get first word [B, vocab_size] -> [B]
+            current_word = self.out_linear(output2.squeeze(dim=1))
+            current_word = torch.argmax(current_word, dim=1)
+            pred = [current_word]
+            for i in range(self.length - 2):
+                # input2 [B, 1, hid]
+                input2 = self.embedding(current_word.unsqueeze(1))
+                input2 = torch.cat([input2, output1[:, self.length + i + 1, :].unsqueeze(dim=1)], dim=2)
+                # [B, 1, 2hid] -> [B, 1, hid]
+                output2, state2 = self.word_rnn(input2, state2)
+                # get this word [B, vocab_size] -> [B]
+                current_word = self.out_linear(output2.squeeze(dim=1))
+                current_word = torch.argmax(current_word, dim=1)
+                pred.append(current_word)
+            pred = torch.cat(pred, dim=0).view(self.length - 1, batch_size)
+            # print(pred.shape)
+            return pred.transpose(dim0=0, dim1=1)
+
+    def load_glove_weights(self, glove_path, glove_dim, ix2word):
+        assert glove_dim == self.dim_embed
+        f = open(glove_path, encoding='utf-8')
+        word2embed = {}
+        for line in f.readlines():
+            vector = line.split(' ')
+            word = vector[0]  # str
+            embed = map(eval, vector[1:])  # 300
+            word2embed[word] = torch.tensor(embed, dtype=torch.float, device=self.device)
+        weights = torch.zeros([self.vocab_size, glove_dim])
+        torch.nn.init.xavier_normal_(weights)
+        for ix, word in ix2word.items():
+            if word in word2embed:
+                weights[ix, :] = word2embed[word]
+        self.embedding = nn.Embedding.from_pretrained(weights, freeze=False)

@@ -9,7 +9,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class VideoDataset(Dataset):
-    def __init__(self, captions_file, feat_path, mode='train'):
+    def __init__(self, captions_file, feat_path, max_len=80, mode='train'):
         with open(captions_file, encoding='utf-8') as f:
             data = json.load(f)
             self.word2ix = data['word2ix']
@@ -22,57 +22,37 @@ class VideoDataset(Dataset):
         for path in all_feat_paths:
             if path.stem in self.splits[mode]:
                 self.feat_paths.append(path)
+        self.max_len = max_len
+        print("prepare {} dataset. vocab_size: {}, dataset_size: {}".format(mode, len(self.word2ix), len(self.feat_paths)))
 
     def __getitem__(self, index):
         """
-        select a feature and select a random corresponding caption
+        select a feature and randomly select a corresponding caption,
+        then pad the caption to max_len when mode is 'train' or 'valid'
         :param index: index of data
         :return: tuple(tensor(img_feat), tensor(label), str(ID))
         """
         ID = self.feat_paths[index].stem
+
         feat = np.load(str(self.feat_paths[index]))
-        feat = torch.tensor(feat)
+        feat = torch.tensor(feat, dtype=torch.float, device=device, requires_grad=True)
+
         labels = self.captions[ID]
-        label = random.choice(labels)
-        return feat, label, ID
+        label = np.random.choice(labels, 1)[0]
+        if len(label) > self.max_len:
+            label = label[:self.max_len]
+        pad_label = torch.zeros([self.max_len], dtype=torch.long, device=device)
+        pad_label[:len(label)] = torch.tensor(label, dtype=torch.long, device=device)
+        mask = torch.zeros([self.max_len], dtype=torch.float, device=device)
+        mask[:len(label)] = 1
+
+        return feat, pad_label, ID, mask
 
     def __len__(self):
         return len(self.feat_paths)
 
 
-def collate_fn(data):
-    """
-    sort according to length of feature, and pad to same size in a batch.
-    :param data: list[batch_size, list[feat, label, ID]]
-    :return: tensor[batch_size, feat_max, 2048], tensor[batch_size, label_max], list[batch_size]
-    """
-    # extract feat and label from batch
-    batch_size = len(data)
-    feat_dim = data[0][0].shape[1]
-    feat_max = 0
-    label_max = 0
-    for i, item in enumerate(data):
-        feat, label, ID = item  # feat:tensor label:list ID:str
-        feat_max = feat.shape[0] if feat_max < feat.shape[0] else feat_max
-        label_max = len(label) if label_max < len(label) else label_max
-
-    # sort and pad
-    data.sort(reverse=True, key=lambda x: x[0].shape[0])
-    feats_np = np.zeros([batch_size, feat_max, feat_dim], dtype=np.float)
-    labels_np = np.zeros([batch_size, label_max], dtype=np.long)
-    IDs = []
-    for i, (feat, label, ID) in enumerate(data):
-        feats_np[i][0:feat.shape[0]] = feat
-        labels_np[i][0:len(label)] = label
-        IDs.append(ID)
-
-    # build tensor
-    feats_ts = torch.tensor(feats_np, dtype=torch.float, device=device)
-    labels_ts = torch.tensor(labels_np, dtype=torch.long, device=device)
-
-    return feats_ts, labels_ts, IDs
-
-
 if __name__ == '__main__':
-    trainset = VideoDataset('data/captions.json', 'data/feats')
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, collate_fn=collate_fn)
+    trainset = VideoDataset('data/captions.json', '../S2VT-master/Data/Features_VGG')
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True)
+    a = next(iter(train_loader))

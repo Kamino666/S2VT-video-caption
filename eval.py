@@ -9,8 +9,7 @@ import random
 from tqdm import tqdm
 import sys
 
-from dataloader import VideoDataset, collate_fn
-from train import get_pad_lengths
+from dataloader import VideoDataset
 
 from coco_caption.pycocoevalcap.bleu.bleu import Bleu
 from coco_caption.pycocoevalcap.rouge.rouge import Rouge
@@ -22,12 +21,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"./checkpoint/21_03_02_19_23_21-final.pth"
+    model_path = r"./checkpoint/21_03_06_17_16_43-40.pth"
     csv_file = r"./data/video_corpus.csv"
     train_source_file = r"./data/annotation2016/train_val_videodatainfo.json"
-    caption_file = r"./data/captions_MSR_VTT.json"
-    feats_path = r"./data/feats/resnet152"
-    batch_size = 8
+    caption_file = r"./data/captions.json"
+    feats_path = r"G:\workspace\pytorch\S2VT-master\Data\Features_VGG"
+    batch_size = 10
 
 
 def eval():
@@ -35,8 +34,7 @@ def eval():
 
     # prepare data
     validset = VideoDataset(opt.caption_file, opt.feats_path, mode='valid')
-    valid_loader = torch.utils.data.DataLoader(validset, batch_size=opt.batch_size, shuffle=False,
-                                               collate_fn=collate_fn)
+    valid_loader = torch.utils.data.DataLoader(validset, batch_size=opt.batch_size, shuffle=False)
     word2ix = validset.word2ix
     ix2word = validset.ix2word
     vocab_size = len(word2ix)
@@ -49,24 +47,16 @@ def eval():
     ###
 
     prediction_dict = {}
-    for index, (feats, targets, IDs) in enumerate(tqdm(valid_loader, desc="test")):
+    for index, (feats, targets, IDs, masks) in enumerate(tqdm(valid_loader, desc="test")):
         # get prediction and cal loss
         model.eval()
-        feat_lengths = get_pad_lengths(feats)
         with torch.no_grad():
-            probs, preds = model(feats, feat_lengths, targets=targets, mode='test')
-        # assert 1 == 0
+            preds = model(feats, mode='test')  # preds [B, L]
         # save result
         for ID, pred in zip(IDs, preds):
-            # truncate padding tail
-            for i in range(len(pred)):
-                if pred[i] == 0:
-                    pred = pred[:i]
-                    break
-            # to words
             word_preds = [ix2word[str(i.item())] for i in pred]
-            if word_preds[0] == '<sos>':
-                del word_preds[0]
+            # if word_preds[0] == '<sos>':
+            #     del word_preds[0]
             prediction_dict[ID] = ' '.join(word_preds)
 
     return prediction_dict
@@ -240,14 +230,14 @@ class COCOScorer(object):
 if __name__ == '__main__':
     opt = Opt()
     prediction_dict = eval()
-    # gts = csv_to_coco_gts(r'./data/video_corpus.csv', clean_only=True)
-    gts = mst_vrr_to_coco_gts(opt.train_source_file)
-    samples, IDs = pred_to_coco_samples_IDs(prediction_dict)
-
-    scorer = COCOScorer()
-    scorer.score(gts, samples, IDs)
-
-    print("***********************")
-    print(scorer.eval)
-    print("***********************")
-    print(scorer.imgToEval)
+    # gts = csv_to_coco_gts(r'./data/video_corpus.csv', clean_only=False)
+    # gts = mst_vrr_to_coco_gts(opt.train_source_file)
+    # samples, IDs = pred_to_coco_samples_IDs(prediction_dict)
+    #
+    # scorer = COCOScorer()
+    # scorer.score(gts, samples, IDs)
+    #
+    # print("***********************")
+    # print(scorer.eval)
+    # print("***********************")
+    # print(scorer.imgToEval)

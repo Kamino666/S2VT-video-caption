@@ -11,9 +11,9 @@ import os
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-from dataloader import VideoDataset, collate_fn
-from S2VTModel import S2VTModel
-from utils import LengthCriterion, EarlyStopping
+from dataloader import VideoDataset
+from S2VTModel import S2VT
+from utils import MaskCriterion, EarlyStopping
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 writer = SummaryWriter()
@@ -21,77 +21,75 @@ writer = SummaryWriter()
 
 class Opt:
     # data config
-    caption_file = r"./data/captions_MSR_VTT.json"
-    feats_path = r"./data/feats/resnet152"
+    caption_file = r"./data/captions.json"
+    feats_path = r"G:\workspace\pytorch\S2VT-master\Data\Features_VGG"
     # model config
-    max_len = 30
-    dim_hidden = 1000
-    dim_word = 500
-    feat_dim = 2048
+    train_length = 80
+    dim_hidden = 500
+    dim_embed = 500
+    feat_dim = 4096
+    feat_dropout = 0.5
+    out_dropout = 0.5
     rnn_dropout = 0.5
     num_layers = 1
     bidirectional = False
+    rnn_type = 'lstm'
     # data config
     batch_size = 32
     # train config
-    EPOCHS = 200
+    EPOCHS = 300
     save_freq = 30
     save_path = './checkpoint'
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
-    early_stopping_patience = 10
+    early_stopping_patience = 30
     # optimizer config
-    lr = 0.0004
-    learning_rate_decay_every = 50
-    learning_rate_decay_rate = 0.8
-    weight_decay = 5e-4  # Regularzation
-
-
-def get_pad_lengths(data, pad_id=0):
-    # print(data.shape)
-    lengths = []
-    for seq in data:
-        count = 0
-        for item in seq:
-            if (item == torch.zeros(item.shape, dtype=torch.double, device=item.device)).all():
-                break
-            else:
-                count += 1
-        lengths.append(count)
-    return lengths
+    lr = 0.0001
+    learning_rate_decay_every = 25
+    learning_rate_decay_rate = 0.1
+    # weight_decay = 5e-4  # Regularzation
+    weight_decay = 5e-6  # Regularzation
 
 
 def train():
     opt = Opt()
     # prepare data
     trainset = VideoDataset(opt.caption_file, opt.feats_path)
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True, collate_fn=collate_fn)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True)
     testset = VideoDataset(opt.caption_file, opt.feats_path, mode='valid')
-    test_loader = torch.utils.data.DataLoader(testset, batch_size=opt.batch_size, shuffle=False, collate_fn=collate_fn)
+    test_loader = torch.utils.data.DataLoader(testset, batch_size=opt.batch_size, shuffle=False)
     word2ix = trainset.word2ix
     ix2word = trainset.ix2word
     vocab_size = len(word2ix)
 
     # build model
-    model = S2VTModel(
+    model = S2VT(
         vocab_size,
         opt.feat_dim,
-        rnn_dropout_p=opt.rnn_dropout,
-        bidirectional=opt.bidirectional
+        dim_hid=opt.dim_hidden,
+        dim_embed=opt.dim_embed,
+        length=opt.train_length,
+        feat_dropout=opt.feat_dropout,
+        rnn_dropout=opt.rnn_dropout,
+        out_dropout=opt.out_dropout,
+        num_layers=opt.num_layers,
+        bidirectional=opt.bidirectional,
+        rnn_type=opt.rnn_type,
+        sos_ix=word2ix['<sos>']
     ).to(device)
     optimizer = optim.Adam(
         model.parameters(),
         lr=opt.lr,
-        weight_decay=opt.weight_decay
+        # weight_decay=opt.weight_decay
     )
-    lr_scheduler = optim.lr_scheduler.StepLR(
-        optimizer,
-        step_size=opt.learning_rate_decay_every,
-        gamma=opt.learning_rate_decay_rate
-    )
+    # lr_scheduler = optim.lr_scheduler.StepLR(
+    #     optimizer,
+    #     step_size=opt.learning_rate_decay_every,
+    #     gamma=opt.learning_rate_decay_rate
+    # )
     early_stopping = EarlyStopping(patience=opt.early_stopping_patience,
                                    verbose=True,
                                    path=os.path.join(opt.save_path, opt.start_time + 'stop.pth'))
-    criterion = LengthCriterion()
+    criterion = MaskCriterion()
 
     ###
     ### start training
@@ -102,20 +100,19 @@ def train():
             # train
             train_running_loss = 0.0
             loss_count = 0
-            for index, (feats, targets, IDs) in enumerate(
+            for index, (feats, targets, IDs, masks) in enumerate(
                     tqdm(train_loader, desc="epoch:{}".format(epoch))):
                 optimizer.zero_grad()
                 model.train()
 
-                feat_lengths = get_pad_lengths(feats)
-                probs, preds = model(feats, feat_lengths, targets, teacher_forcing_rate=0)
-                # probs: [batch_size, label_max, vocab_size] targets: [batch_size, label_max]
-                # loss = criterion(probs.contiguous().view(probs.shape[0]*probs.shape[1], -1)
-                #                  , targets[:, :-1].contiguous().view(-1))
-                loss = criterion(probs, targets, feat_lengths)
+                # probs [B, L, vocab_size]
+                probs = model(feats, targets=targets[:, :-1], mode='train')
+
+                loss = criterion(probs, targets, masks)
 
                 loss.backward()
                 optimizer.step()
+                # lr_scheduler.step()
 
                 train_running_loss += loss.item()
                 loss_count += 1
@@ -126,22 +123,22 @@ def train():
             # validate
             valid_running_loss = 0.0
             loss_count = 0
-            for index, (feats, targets, IDs) in enumerate(test_loader):
-                optimizer.zero_grad()
+            for index, (feats, targets, IDs, masks) in enumerate(test_loader):
                 model.eval()
 
-                feat_lengths = get_pad_lengths(feats)
                 with torch.no_grad():
-                    probs, preds = model(feats, feat_lengths, targets)
+                    probs = model(feats, targets=targets[:, :-1], mode='train')
+                    loss = criterion(probs, targets, masks)
 
-                # loss = criterion(probs.contiguous().view(probs.shape[0] * probs.shape[1], -1)
-                #                  , targets[:, :-1].contiguous().view(-1))
-                loss = criterion(probs, targets, feat_lengths)
                 valid_running_loss += loss.item()
                 loss_count += 1
 
             valid_running_loss /= loss_count
             writer.add_scalar('valid_loss', valid_running_loss, global_step=epoch)
+            if epoch % 10 == 0:
+                for i, (name, param) in enumerate(model.named_parameters()):
+                    writer.add_histogram(name, param, epoch)
+
             print("train loss:{} valid loss: {}".format(train_running_loss, valid_running_loss))
 
             # early stop
@@ -155,7 +152,9 @@ def train():
                 print('epoch:{}, saving checkpoint'.format(epoch))
                 torch.save(model, os.path.join(opt.save_path,
                                                opt.start_time + str(epoch) + '.pth'))
+
     except KeyboardInterrupt as e:
+        print(e)
         print("Training interruption, save tensorboard log...")
         writer.close()
     # save model
@@ -166,5 +165,3 @@ if __name__ == '__main__':
     train()
 
 # TODO(Kamino): beam_search
-
-

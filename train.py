@@ -26,7 +26,7 @@ class Opt:
     # model config
     train_length = 80
     dim_hidden = 500
-    dim_embed = 500
+    dim_embed = 300
     feat_dim = 4096
     feat_dropout = 0.5
     out_dropout = 0.5
@@ -44,14 +44,23 @@ class Opt:
     early_stopping_patience = 30
     # optimizer config
     lr = 0.0001
-    learning_rate_decay_every = 25
-    learning_rate_decay_rate = 0.1
+    # learning_rate_decay_every = 100
+    # learning_rate_decay_rate = 0.3
+    learning_rate_patience = 20
     # weight_decay = 5e-4  # Regularzation
-    weight_decay = 5e-6  # Regularzation
+    # weight_decay = 5e-5  # Regularzation
+
+
+def save_opt(opt):
+    with open(os.path.join(opt.save_path, opt.start_time + 'opt.txt'), 'w+', encoding='utf-8') as f:
+        f.write(str(vars(Opt)))
 
 
 def train():
     opt = Opt()
+    # write log
+    save_opt(opt)
+
     # prepare data
     trainset = VideoDataset(opt.caption_file, opt.feats_path)
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True)
@@ -76,6 +85,7 @@ def train():
         rnn_type=opt.rnn_type,
         sos_ix=word2ix['<sos>']
     ).to(device)
+    model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
     optimizer = optim.Adam(
         model.parameters(),
         lr=opt.lr,
@@ -86,6 +96,9 @@ def train():
     #     step_size=opt.learning_rate_decay_every,
     #     gamma=opt.learning_rate_decay_rate
     # )
+    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, verbose=True, patience=opt.learning_rate_patience
+    )
     early_stopping = EarlyStopping(patience=opt.early_stopping_patience,
                                    verbose=True,
                                    path=os.path.join(opt.save_path, opt.start_time + 'stop.pth'))
@@ -135,11 +148,13 @@ def train():
 
             valid_running_loss /= loss_count
             writer.add_scalar('valid_loss', valid_running_loss, global_step=epoch)
+            writer.add_scalar('lr', optimizer.state_dict()['param_groups'][0]['lr'], global_step=epoch)
             if epoch % 10 == 0:
                 for i, (name, param) in enumerate(model.named_parameters()):
                     writer.add_histogram(name, param, epoch)
 
             print("train loss:{} valid loss: {}".format(train_running_loss, valid_running_loss))
+            lr_scheduler.step(valid_running_loss)
 
             # early stop
             early_stopping(valid_running_loss, model)
@@ -165,3 +180,6 @@ if __name__ == '__main__':
     train()
 
 # TODO(Kamino): beam_search
+# TODO(Kamino): 更改注释成英文
+# TODO(Kamino): 写Readme
+# TODO(Kamino): 走通MSR-VTT

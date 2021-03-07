@@ -208,8 +208,3 @@ if __name__ == '__main__':
     #     captions_file=r'./data/captions_MSR_VTT.json'
     # )
 
-
-
-# TODO(Kamino): 更改注释成英文
-# TODO(Kamino): 写Readme
-# TODO(Kamino): 走通MSR-VTT

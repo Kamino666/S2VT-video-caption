@@ -1,7 +1,6 @@
 import pretrainedmodels
 from pretrainedmodels import utils
 import torch
-import torch.nn as nn
 
 import os
 import subprocess
@@ -176,4 +175,3 @@ if __name__ == '__main__':
         mode=args['mode'],
     )
 
-# TODO(Kamino): 全面导入命令行模式

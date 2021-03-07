@@ -3,6 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 import random
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from tqdm import tqdm
+import json
 
 
 class S2VTModel(nn.Module):
@@ -183,7 +185,7 @@ class S2VT(nn.Module):
             return result
         else:
             """Encoding Stage of word_rnn layer"""
-            padding = torch.zeros([batch_size, self.length, self.dim_hid], device=device)
+            padding = torch.zeros([batch_size, self.length, self.dim_embed], device=device)
             input2 = torch.cat([padding, output1[:, :self.length, :]], dim=2)
             _, state2 = self.word_rnn(input2)
 
@@ -211,18 +213,39 @@ class S2VT(nn.Module):
             # print(pred.shape)
             return pred.transpose(dim0=0, dim1=1)
 
-    def load_glove_weights(self, glove_path, glove_dim, ix2word):
-        assert glove_dim == self.dim_embed
+    def _get_word2embed_from_glove(self, glove_path, ix2word):
         f = open(glove_path, encoding='utf-8')
         word2embed = {}
-        for line in f.readlines():
+        for line in tqdm(f.readlines(), desc='loading GloVe'):
             vector = line.split(' ')
             word = vector[0]  # str
-            embed = map(eval, vector[1:])  # 300
-            word2embed[word] = torch.tensor(embed, dtype=torch.float, device=self.device)
-        weights = torch.zeros([self.vocab_size, glove_dim])
+            if word not in ix2word.values():  # 优化
+                continue
+            embed = []
+            for str_num in vector[1:]:
+                str_num = str_num.replace('\n', '')
+                embed.append(eval(str_num))
+            word2embed[word] = embed
+            # word2embed[word] = torch.tensor(embed, dtype=torch.float, device=torch.device('cuda'))
+        f.close()
+        return word2embed
+
+    def load_glove_weights(self, glove_path, glove_dim, ix2word, word2embed='./data/word2embed.json'):
+        assert glove_dim == self.dim_embed
+        if word2embed is None:
+            word2embed = self._get_word2embed_from_glove(glove_path, ix2word)
+            with open('./data/word2embed.json', 'w+', encoding='utf-8') as fp:
+                json.dump(word2embed, fp)
+        else:
+            with open('./data/word2embed.json', encoding='utf-8') as fp:
+                word2embed = json.load(fp)
+
+        print('get {} word2embed'.format(len(word2embed)))
+
+        weights = torch.zeros([self.vocab_size, glove_dim], dtype=torch.float, device=torch.device('cuda'))
         torch.nn.init.xavier_normal_(weights)
         for ix, word in ix2word.items():
             if word in word2embed:
-                weights[ix, :] = word2embed[word]
+                single_word_embed = torch.tensor(word2embed[word], dtype=torch.float, device=torch.device('cuda'))
+                weights[int(ix)] = single_word_embed
         self.embedding = nn.Embedding.from_pretrained(weights, freeze=False)

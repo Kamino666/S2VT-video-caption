@@ -3,9 +3,6 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 import torch.nn as nn
 
-import numpy as np
-import json
-import random
 import time
 import os
 from tqdm import tqdm
@@ -20,34 +17,33 @@ writer = SummaryWriter()
 
 
 class Opt:
-    # data config
-    caption_file = r"./data/captions.json"
-    feats_path = r"G:\workspace\pytorch\S2VT-master\Data\Features_VGG"
-    # model config
-    train_length = 80
+    """config class"""
+    # - data config
+    caption_file = r"./data/captions.json"  # the file generated in prepare_captions.py
+    feats_path = r"./data/feats/vgg16_bn"  # the features extracted by extract_features.py
+    # - model config
+    train_length = 80  # fix length during training, the feats length must be equal to this
     dim_hidden = 500
-    dim_embed = 300
+    dim_embed = 500
     feat_dim = 4096
     feat_dropout = 0.5
     out_dropout = 0.5
     rnn_dropout = 0.5
     num_layers = 1
-    bidirectional = False
-    rnn_type = 'lstm'
-    # data config
+    bidirectional = False  # do not use True yet
+    rnn_type = 'lstm'  # do not change to GRU yet
+    # - data config
     batch_size = 32
-    # train config
+    # - train config
     EPOCHS = 300
-    save_freq = 30
+    save_freq = 100  # every n epoch, save once
     save_path = './checkpoint'
+    histogram_freq = 10
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
     early_stopping_patience = 30
-    # optimizer config
+    # - optimizer config
     lr = 0.0001
-    # learning_rate_decay_every = 100
-    # learning_rate_decay_rate = 0.3
     learning_rate_patience = 20
-    # weight_decay = 5e-4  # Regularzation
     # weight_decay = 5e-5  # Regularzation
 
 
@@ -83,19 +79,16 @@ def train():
         num_layers=opt.num_layers,
         bidirectional=opt.bidirectional,
         rnn_type=opt.rnn_type,
-        sos_ix=word2ix['<sos>']
+        sos_ix=word2ix['<sos>'],
+        eos_ix=word2ix['<eos>'],
     ).to(device)
-    model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
+    # model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
     optimizer = optim.Adam(
         model.parameters(),
         lr=opt.lr,
         # weight_decay=opt.weight_decay
     )
-    # lr_scheduler = optim.lr_scheduler.StepLR(
-    #     optimizer,
-    #     step_size=opt.learning_rate_decay_every,
-    #     gamma=opt.learning_rate_decay_rate
-    # )
+    # dynamic learning rate
     lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, verbose=True, patience=opt.learning_rate_patience
     )
@@ -110,7 +103,9 @@ def train():
 
     try:
         for epoch in range(opt.EPOCHS):
-            # train
+            # ****************************
+            #            train
+            # ****************************
             train_running_loss = 0.0
             loss_count = 0
             for index, (feats, targets, IDs, masks) in enumerate(
@@ -125,7 +120,6 @@ def train():
 
                 loss.backward()
                 optimizer.step()
-                # lr_scheduler.step()
 
                 train_running_loss += loss.item()
                 loss_count += 1
@@ -133,7 +127,9 @@ def train():
             train_running_loss /= loss_count
             writer.add_scalar('train_loss', train_running_loss, global_step=epoch)
 
-            # validate
+            # ****************************
+            #           validate
+            # ****************************
             valid_running_loss = 0.0
             loss_count = 0
             for index, (feats, targets, IDs, masks) in enumerate(test_loader):
@@ -149,7 +145,7 @@ def train():
             valid_running_loss /= loss_count
             writer.add_scalar('valid_loss', valid_running_loss, global_step=epoch)
             writer.add_scalar('lr', optimizer.state_dict()['param_groups'][0]['lr'], global_step=epoch)
-            if epoch % 10 == 0:
+            if epoch % opt.histogram_freq == 0:
                 for i, (name, param) in enumerate(model.named_parameters()):
                     writer.add_histogram(name, param, epoch)
 
@@ -179,7 +175,6 @@ def train():
 if __name__ == '__main__':
     train()
 
-# TODO(Kamino): beam_search
 # TODO(Kamino): 更改注释成英文
 # TODO(Kamino): 写Readme
 # TODO(Kamino): 走通MSR-VTT

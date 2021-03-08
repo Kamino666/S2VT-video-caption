@@ -3,7 +3,6 @@ import numpy as np
 import re
 import json
 from collections import Counter
-import random
 from tqdm import tqdm
 
 
@@ -94,7 +93,7 @@ def parse_csv(csv_file, captions_file, gts_file, clean_only=False):
     # split dataset
     data_split = [1400, 450, -1]  # train valid test
     vid_names = list(caption_dict.keys())
-    random.shuffle(vid_names)
+    np.random.shuffle(vid_names)
     train_split = vid_names[:data_split[0]]
     valid_split = vid_names[data_split[0]:data_split[0] + data_split[1]]
     test_split = vid_names[data_split[0] + data_split[1]:]
@@ -199,7 +198,7 @@ if __name__ == '__main__':
         csv_file=r'./data/video_corpus.csv',
         captions_file=r'./data/captions.json',
         gts_file=r"./data/gts.json",
-        clean_only=True
+        clean_only=False
     )
     # parse_msr_vtt(
     #     train_source_file=r"train_val_videodatainfo.json",

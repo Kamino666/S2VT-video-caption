@@ -4,6 +4,7 @@ import numpy as np
 
 
 class MaskCriterion(nn.Module):
+    """calculate the CrossEntropyLoss in mask=1 area"""
 
     def __init__(self):
         super(MaskCriterion, self).__init__()
@@ -75,7 +76,8 @@ class EarlyStopping:
         if self.verbose:
             self.trace_func(
                 f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        # torch.save(model.state_dict(), self.path)
         torch.save(model, self.path)
         self.val_loss_min = val_loss
+
+
 

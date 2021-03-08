@@ -37,7 +37,7 @@ class VideoDataset(Dataset):
         feat = torch.tensor(feat, dtype=torch.float, device=device, requires_grad=True)
 
         labels = self.captions[ID]
-        label = np.random.choice(labels, 1)[0]
+        label = np.random.choice(labels, 1)[0]  # do not use Python random.choice
         if len(label) > self.max_len:
             label = label[:self.max_len]
         pad_label = torch.zeros([self.max_len], dtype=torch.long, device=device)
@@ -52,6 +52,7 @@ class VideoDataset(Dataset):
 
 
 if __name__ == '__main__':
+    # for debug
     trainset = VideoDataset('data/captions.json', '../S2VT-master/Data/Features_VGG')
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True)
     a = next(iter(train_loader))

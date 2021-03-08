@@ -19,12 +19,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"./checkpoint/21_03_06_23_41_57-stop.pth"
+    model_path = r"21_03_07_15_09_56-final.pth"
     csv_file = r"./data/video_corpus.csv"
     train_source_file = r"./data/annotation2016/train_val_videodatainfo.json"
-    caption_file = r"./data/captions.json"
-    feats_path = r"G:\workspace\pytorch\S2VT-master\Data\Features_VGG"
-    batch_size = 10
+    caption_file = r"./data/captions_server.json"
+    feats_path = r"./data/feats/vgg16_bn"
+    batch_size = 2
 
 
 def eval():
@@ -53,12 +53,53 @@ def eval():
         # save result
         for ID, pred in zip(IDs, preds):
             word_preds = [ix2word[str(i.item())] for i in pred]
-            word_preds = word_preds[:word_preds.index('<eos>')]
+            if '<eos>' in word_preds:
+                word_preds = word_preds[:word_preds.index('<eos>')]
             pred_dict[ID] = ' '.join(word_preds)
 
     return pred_dict
 
 
+def beam_eval():
+    opt = Opt()
+
+    # prepare data
+    validset = VideoDataset(opt.caption_file, opt.feats_path, mode='test')
+    valid_loader = torch.utils.data.DataLoader(validset, batch_size=opt.batch_size, shuffle=False)
+    word2ix = validset.word2ix
+    ix2word = validset.ix2word
+    vocab_size = len(word2ix)
+
+    # load model
+    model = torch.load(opt.model_path).to(device)
+
+    ###
+    ### start test
+    ###
+
+    pred_dict = {}
+    for index, (feats, targets, IDs, masks) in enumerate(tqdm(valid_loader, desc="test")):
+        # get prediction and cal loss
+        model.eval()
+        model.rnn_type = 'lstm'
+        model.sos_ix = 3
+        model.eos_ix = 4
+        with torch.no_grad():
+            preds = model(feats, mode='beam_search')  # preds [B, L]
+        # save result
+        for ID, pred in zip(IDs, preds):
+            word_preds = [ix2word[str(i.item())] for i in pred]
+            if '<eos>' in word_preds:
+                word_preds = word_preds[:word_preds.index('<eos>')]
+            if '<sos>' in word_preds:
+                word_preds.remove('<sos>')
+            pred_dict[ID] = ' '.join(word_preds)
+        print(pred_dict)
+
+    return pred_dict
+
+
+# abandon
 def mst_vrr_to_coco_gts(train_source_file):
     # read data
     with open(train_source_file, encoding='utf-8') as f:
@@ -111,20 +152,23 @@ def pred_to_coco_samples_IDs(prediction_dict):
 
 
 class COCOScorer(object):
+    """
+    codes from https://github.com/tylin/coco-caption
+    Microsoft COCO Caption Evaluation
+    """
     def __init__(self):
         print('init COCO-EVAL scorer')
 
     def score(self, GT, RES, IDs):
         self.eval = {}
         self.imgToEval = {}
-        # 根据IDs，把要检测的项目提取出来
         gts = {}
         res = {}
         for ID in IDs:
             #            print ID
             gts[ID] = GT[ID]
             res[ID] = RES[ID]
-        # 获取token
+        # get token
         print('tokenization...')
         tokenizer = PTBTokenizer()
         gts = tokenizer.tokenize(gts)
@@ -175,10 +219,7 @@ class COCOScorer(object):
 
 
 if __name__ == '__main__':
-    opt = Opt()
-    prediction_dict = eval()
-    # gts = csv_to_coco_gts(r'./data/video_corpus.csv', clean_only=False)
-    # gts = mst_vrr_to_coco_gts(opt.train_source_file)
+    prediction_dict = beam_eval()
     with open('./data/gts.json', encoding='utf-8') as f:
         gts = json.load(f)['gts']
     samples, IDs = pred_to_coco_samples_IDs(prediction_dict)

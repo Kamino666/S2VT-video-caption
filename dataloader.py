@@ -53,6 +53,6 @@ class VideoDataset(Dataset):
 
 if __name__ == '__main__':
     # for debug
-    trainset = VideoDataset('data/captions.json', '../S2VT-master/Data/Features_VGG')
+    trainset = VideoDataset('data/captions.json', 'data/feats/vgg16_bn')
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True)
     a = next(iter(train_loader))

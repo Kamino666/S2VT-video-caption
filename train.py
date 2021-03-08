@@ -175,6 +175,5 @@ def train():
 if __name__ == '__main__':
     train()
 
-# TODO(Kamino): 更改注释成英文
-# TODO(Kamino): 写Readme
+
 # TODO(Kamino): 走通MSR-VTT

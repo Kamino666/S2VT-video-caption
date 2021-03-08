@@ -219,7 +219,8 @@ class COCOScorer(object):
 
 
 if __name__ == '__main__':
-    prediction_dict = beam_eval()
+    # prediction_dict = beam_eval()  # beam search. needs a LOT of time.
+    prediction_dict = eval()
     with open('./data/gts.json', encoding='utf-8') as f:
         gts = json.load(f)['gts']
     samples, IDs = pred_to_coco_samples_IDs(prediction_dict)

@@ -1,8 +1,8 @@
 # S2VT-video-caption
 
-[TOC]
 
-The recurrence of paper "S.Venugopalan, M.Rohrbach, J.Donahue et. Sequence to Sequence – Video to Text. 2015, CVPR" [1505.00487 Sequence to Sequence -- Video to Text (arxiv.org)](https://arxiv.org/abs/1505.00487)
+
+A implementation of paper "S.Venugopalan, M.Rohrbach, J.Donahue et. Sequence to Sequence – Video to Text. 2015, CVPR" [1505.00487 Sequence to Sequence -- Video to Text (arxiv.org)](https://arxiv.org/abs/1505.00487)
 
 > This is the first deep learning repository I developed. If you have any questions, please contact me in the Issue. Because of my lack of knowledge, I may not be able to improve this project well. If you find any problems, welcome to submit a PR.
 >
@@ -63,7 +63,7 @@ I use **Python 3.6** in this project. Recommend installing pytorch and python pa
 
    I provide ["Bleu_1",  "Bleu_2", "Bleu_3",  "Bleu_4", "METEOR", "ROUGE_L" ,"CIDEr"] metrics. I mainly focus on METEOR metric as the paper used this.
 
-   > **The METEOR score** is computed based on the alignment between a given hypothesis sentence and a set of candidate reference sentences. METEOR compares exact token matches, stemmed tokens, paraphrase matches, as well as semantically similar matches using WordNet synonyms.
+   > **The METEOR score** is computed based on the alignment between a given hypothesis sentence and a set of candidate reference sentences. METEOR compares exact token matches, stemmed tokens, paraphrase matches, as well as semantically similar matches using WordNet synonyms.
 
 7. \***Check logs**
 

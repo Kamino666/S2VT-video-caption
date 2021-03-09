@@ -25,7 +25,7 @@ class S2VT(nn.Module):
         self.out_drop = nn.Dropout(p=out_dropout)
         self.feat_linear = nn.Linear(feat_dim, dim_hid)
         self.out_linear = nn.Linear(dim_hid, vocab_size)
-        self.embedding = nn.Embedding(vocab_size, dim_hid)
+        self.embedding = nn.Embedding(vocab_size, dim_embed)
         # save parameters
         self.feat_dim = feat_dim
         self.length = length
@@ -71,7 +71,7 @@ class S2VT(nn.Module):
             embed = self.embedding(targets)
             padding = torch.zeros([batch_size, self.length, self.dim_embed], dtype=torch.long, device=device)
             pad_embed = torch.cat([padding, embed], dim=1)
-            # input2 [B, 2L-1, 2hid]
+            # input2 [B, 2L-1, hid+embed]
             input2 = torch.cat([pad_embed, output1], dim=2)
             # RNN2
             output2, state2 = self.word_rnn(input2)

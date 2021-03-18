@@ -9,7 +9,8 @@ from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
 from dataloader import VideoDataset
-from S2VTModel import S2VT
+from S2VTModel import S2VT, S2VT_Att
+from attention_baseline import Att_Baseline
 from utils import MaskCriterion, EarlyStopping
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -19,21 +20,21 @@ writer = SummaryWriter()
 class Opt:
     """config class"""
     # - data config
-    caption_file = r"./data/captions.json"  # the file generated in prepare_captions.py
+    caption_file = r"./data/captions_server.json"  # the file generated in prepare_captions.py
     feats_path = r"./data/feats/vgg16_bn"  # the features extracted by extract_features.py
     # - model config
     train_length = 80  # fix length during training, the feats length must be equal to this
-    dim_hidden = 500
-    dim_embed = 500
+    dim_hidden = 512
+    dim_embed = 512
     feat_dim = 4096
-    feat_dropout = 0.5
-    out_dropout = 0.5
-    rnn_dropout = 0.5
+    feat_dropout = 0
+    out_dropout = 0
+    rnn_dropout = 0
     num_layers = 1
     bidirectional = False  # do not use True yet
     rnn_type = 'lstm'  # do not change to GRU yet
     # - data config
-    batch_size = 32
+    batch_size = 16
     # - train config
     EPOCHS = 300
     save_freq = 100  # every n epoch, save once
@@ -67,21 +68,23 @@ def train():
     vocab_size = len(word2ix)
 
     # build model
-    model = S2VT(
-        vocab_size,
-        opt.feat_dim,
-        dim_hid=opt.dim_hidden,
-        dim_embed=opt.dim_embed,
-        length=opt.train_length,
-        feat_dropout=opt.feat_dropout,
-        rnn_dropout=opt.rnn_dropout,
-        out_dropout=opt.out_dropout,
-        num_layers=opt.num_layers,
-        bidirectional=opt.bidirectional,
-        rnn_type=opt.rnn_type,
-        sos_ix=word2ix['<sos>'],
-        eos_ix=word2ix['<eos>'],
-    ).to(device)
+    # model = S2VT_Att(
+    #     vocab_size,
+    #     opt.feat_dim,
+    #     dim_hid=opt.dim_hidden,
+    #     dim_embed=opt.dim_embed,
+    #     length=opt.train_length,
+    #     feat_dropout=opt.feat_dropout,
+    #     rnn_dropout=opt.rnn_dropout,
+    #     out_dropout=opt.out_dropout,
+    #     num_layers=opt.num_layers,
+    #     bidirectional=opt.bidirectional,
+    #     rnn_type=opt.rnn_type,
+    #     sos_ix=word2ix['<sos>'],
+    #     eos_ix=word2ix['<eos>'],
+    # ).to(device)
+    model = Att_Baseline(vocab_size, opt.feat_dim, length=opt.train_length, dim_hid=opt.dim_hidden, dim_embed=opt.dim_embed,
+                         feat_dropout=opt.feat_dropout, out_dropout=opt.out_dropout, sos_ix=3, eos_ix=4).to(device)
     # model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
     optimizer = optim.Adam(
         model.parameters(),

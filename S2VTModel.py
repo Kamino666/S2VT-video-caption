@@ -272,3 +272,4 @@ class BeamSearchNode(object):
         if other.eval() > self.eval():
             return True
         return False
+

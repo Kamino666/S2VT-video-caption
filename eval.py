@@ -19,7 +19,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"./checkpoint/21_03_15_18_29_59-stop.pth"
+    model_path = r"./checkpoint/21_03_18_18_42_32-stop.pth"
     csv_file = r"./data/video_corpus.csv"
     train_source_file = r"./data/annotation2016/train_val_videodatainfo.json"
     caption_file = r"./data/captions_server.json"

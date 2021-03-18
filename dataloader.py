@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import json
 import pathlib as plb
+import random
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -38,6 +39,7 @@ class VideoDataset(Dataset):
 
         labels = self.captions[ID]
         label = np.random.choice(labels, 1)[0]  # do not use Python random.choice
+        # label = random.choice(labels)
         if len(label) > self.max_len:
             label = label[:self.max_len]
         pad_label = torch.zeros([self.max_len], dtype=torch.long, device=device)

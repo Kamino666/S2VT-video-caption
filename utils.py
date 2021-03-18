@@ -12,7 +12,7 @@ class MaskCriterion(nn.Module):
 
     def forward(self, logits, target, mask):
         """
-        logits: shape of (N, seq_len, vocab_size)
+        logits: shape of (N, seq_len - 1, vocab_size)
         target: shape of (N, seq_len)
         mask: shape of (N, seq_len)
         """

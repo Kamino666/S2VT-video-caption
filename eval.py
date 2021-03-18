@@ -19,12 +19,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"21_03_07_15_09_56-final.pth"
+    model_path = r"./checkpoint/21_03_15_18_29_59-stop.pth"
     csv_file = r"./data/video_corpus.csv"
     train_source_file = r"./data/annotation2016/train_val_videodatainfo.json"
     caption_file = r"./data/captions_server.json"
     feats_path = r"./data/feats/vgg16_bn"
-    batch_size = 2
+    batch_size = 10
 
 
 def eval():
@@ -135,7 +135,7 @@ def mst_vrr_to_coco_gts(train_source_file):
     return gts
 
 
-def pred_to_coco_samples_IDs(prediction_dict):
+def pred_to_coco_samples_IDs(prediction_dict, gts=None):
     # samples = {
     #   '184321': [{u'image_id': '184321', u'caption': u'train traveling down a track in front of a road'}],
     #   '81922': [{u'image_id': '81922', u'caption': u'plane is flying through the sky'}],
@@ -143,11 +143,12 @@ def pred_to_coco_samples_IDs(prediction_dict):
     samples = {}
     IDs = []
     for item in prediction_dict.items():
-        IDs.append(item[0])
-        samples[item[0]] = [{
-            u'image_id': item[0],
-            u'caption': item[1]
-        }]
+        if gts is not None and item[0] in gts:
+            IDs.append(item[0])
+            samples[item[0]] = [{
+                u'image_id': item[0],
+                u'caption': item[1]
+            }]
     return samples, IDs
 
 
@@ -223,7 +224,7 @@ if __name__ == '__main__':
     prediction_dict = eval()
     with open('./data/gts.json', encoding='utf-8') as f:
         gts = json.load(f)['gts']
-    samples, IDs = pred_to_coco_samples_IDs(prediction_dict)
+    samples, IDs = pred_to_coco_samples_IDs(prediction_dict, gts)
 
     scorer = COCOScorer()
     scorer.score(gts, samples, IDs)

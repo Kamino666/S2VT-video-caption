@@ -9,7 +9,7 @@ from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
 from dataloader import VideoDataset
-from S2VTModel import S2VT, S2VT_Att
+from S2VTModel import S2VT
 from attention_baseline import Att_Baseline
 from utils import MaskCriterion, EarlyStopping
 

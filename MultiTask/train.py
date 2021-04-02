@@ -31,7 +31,7 @@ class Opt:
     rnn_dropout = 0.5
     num_layers = 1
     bidirectional = False  # do not use True yet
-    rnn_type = 'gru'  # do not change to GRU yet
+    rnn_type = 'lstm'  # do not change to GRU yet
     # - data config
     batch_size = 16
     embed_weight_path = "../../data/MSR-VTT/embed_weight.npy"
@@ -43,7 +43,7 @@ class Opt:
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
     early_stopping_patience = 30
     # - optimizer config
-    lr = 0.0001
+    lr = 0.001
     learning_rate_patience = 20
     # weight_decay = 5e-5  # Regularzation
 
@@ -87,7 +87,6 @@ def train(model_checkpoint=None):
         model.load_embedding_weight(opt.embed_weight_path)
     else:
         model = torch.load(model_checkpoint)
-    # model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
     optimizer = optim.Adam(
         # model.parameters(),
         filter(lambda p: p.requires_grad, model.parameters()),

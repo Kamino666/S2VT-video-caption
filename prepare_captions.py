@@ -80,7 +80,7 @@ def parse_csv(csv_file, captions_file, gts_file, clean_only=False):
             }]
 
     # build vocab
-    word2ix, ix2word = build_vocab(counter)
+    word2ix, ix2word = build_vocab(counter, min_feq=5)
 
     # turn words into index (1 is <unk>)
     captions = [[word2ix.get(w, word2ix['<unk>']) for w in caption]
@@ -198,16 +198,16 @@ def parse_msr_vtt(train_source_file, test_source_file, captions_file, gts_file):
 
 
 if __name__ == '__main__':
-    # parse_csv(
-    #     csv_file=r'./data/video_corpus.csv',
-    #     captions_file=r'./data/captions.json',
-    #     gts_file=r"./data/gts.json",
-    #     clean_only=False
-    # )
-    parse_msr_vtt(
-        train_source_file=r"../data/annotation2016/train_val_videodatainfo.json",
-        test_source_file=r"../data/annotation2016/test_videodatainfo.json",
-        gts_file=r"../data/gts_MSR_VTT.json",
-        captions_file=r'../data/captions_MSR_VTT.json'
+    parse_csv(
+        csv_file=r'./data/video_corpus.csv',
+        captions_file=r'./data/captions_msvd_min5.json',
+        gts_file=r"./data/gts_msvd_min5.json",
+        clean_only=False
     )
+    # parse_msr_vtt(
+    #     train_source_file=r"../data/annotation2016/train_val_videodatainfo.json",
+    #     test_source_file=r"../data/annotation2016/test_videodatainfo.json",
+    #     gts_file=r"../data/gts_MSR_VTT.json",
+    #     captions_file=r'../data/captions_MSR_VTT.json'
+    # )
 

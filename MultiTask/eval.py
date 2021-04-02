@@ -21,10 +21,11 @@ from MultiTask.dataloader import VideoDataset, Vocabulary, get_batch_data
 from MultiTask.attention_baseline import Att_NoEncoder
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device = torch.device('cpu')
 
 
 class Opt:
-    model_path = r"../checkpoint/21_03_30_07_48_11-stop.pth"
+    model_path = r"../checkpoint/21_03_30_07_48_11-final.pth"
     batch_size = 10
 
 
@@ -34,17 +35,13 @@ def eval():
     data_dir = "/media/omnisky/115a4abd-1149-406e-a3de-2c3a5d707b69/lzh/dual/data/MSVD"
     vocab_file = os.path.join(data_dir, "train", "word_vocab_5.pkl")
     # prepare data
-    test_vid_output_dir = os.path.join(data_dir, "test/vid_rnn_output")
-    test_text_input_dir = os.path.join(data_dir, "test/text_rnn_input")
-    test_word_input_dir = os.path.join(data_dir, "test/word_embed_input")
-    ID_file = os.path.join(data_dir, "test/video_ids.txt")
-    test_set = VideoDataset(test_vid_output_dir, None, None, vocab_file, ID_file=ID_file)
+    test_vid_output_dir = os.path.join(data_dir, "train/vid_rnn_output")
+    # ID_file = os.path.join(data_dir, "test/video_ids.txt")
+    test_set = VideoDataset(test_vid_output_dir, None, None, vocab_file, ID_file=None)
     test_loader = get_batch_data(test_set, shuffle=False)
     word2ix = test_set.word2ix
     ix2word = test_set.ix2word
     vocab_size = len(word2ix)
-
-
 
     # load model
     model = torch.load(opt.model_path).to(device)
@@ -54,13 +51,25 @@ def eval():
     ###
 
     pred_dict = {}
-    for enc_output, IDs in tqdm(test_loader):
+    # for enc_output, IDs in tqdm(test_loader):
+    #     # get prediction and cal loss
+    #     model.eval()
+    #     with torch.no_grad():
+    #         preds = model(enc_output, mode='test')  # preds [B, L]
+    #     # save result
+    #     for ID, pred in zip(IDs, preds):
+    #         word_preds = [ix2word[i.item()] for i in pred]
+    #         if '<eos>' in word_preds:
+    #             word_preds = word_preds[:word_preds.index('<eos>')]
+    #         pred_dict[ID] = ' '.join(word_preds)
+
+    for enc_output in tqdm(test_loader):
         # get prediction and cal loss
         model.eval()
         with torch.no_grad():
             preds = model(enc_output, mode='test')  # preds [B, L]
         # save result
-        for ID, pred in zip(IDs, preds):
+        for ID, pred in enumerate(preds):
             word_preds = [ix2word[i.item()] for i in pred]
             if '<eos>' in word_preds:
                 word_preds = word_preds[:word_preds.index('<eos>')]
@@ -91,6 +100,7 @@ class COCOScorer(object):
     codes from https://github.com/tylin/coco-caption
     Microsoft COCO Caption Evaluation
     """
+
     def __init__(self):
         print('init COCO-EVAL scorer')
 

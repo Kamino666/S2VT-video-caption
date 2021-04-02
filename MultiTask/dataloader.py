@@ -40,9 +40,6 @@ class VideoDataset(Dataset):
         encode_outputs [B, ?, 2048] last batch size is 11
         embed_captions [B, ??, 500]
         captions [B, ??]
-        :param enc_outputs_dir:
-        :param embed_cap_dir:
-        :param captions_dir:
         """
         if embed_cap_dir is None or captions_dir is None:
             self.mode = 'test'
@@ -54,6 +51,8 @@ class VideoDataset(Dataset):
         if self.mode != 'test':
             self.all_embed_path = sorted(list(plb.Path(embed_cap_dir).glob('*.npy')), key=lambda x: int(x.name[:-4]))
             self.all_cap_path = sorted(list(plb.Path(captions_dir).glob('*.npy')), key=lambda x: int(x.name[:-4]))
+        elif ID_file is None:
+            self.IDs = None
         else:
             with open(ID_file) as f:
                 self.IDs = eval(f.read()[2:])
@@ -87,6 +86,8 @@ class VideoDataset(Dataset):
             return enc_output, embed, caption, mask
 
         item_num = enc_output.shape[0]
+        if self.IDs is None:
+            return enc_output
         return enc_output, self.IDs[idx * self.batch_size: idx * self.batch_size + item_num]
 
     def __len__(self):

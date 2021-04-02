@@ -24,6 +24,7 @@ class Att_NoEncoder(nn.Module):
             self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
         else:
             self.decoder = nn.GRU(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
+        self._init_weight()
         self.feat_linear = nn.Linear(dim_feat, dim_hid)
         self.feat_drop = nn.Dropout(p=feat_dropout)
         self.embedding = nn.Embedding(vocab_size, dim_embed, padding_idx=0)
@@ -115,4 +116,10 @@ class Att_NoEncoder(nn.Module):
         weight = torch.tensor(weight, device=device)
         self.embedding.from_pretrained(weight, padding_idx=padding_idx)
         self.embedding.weight.requires_grad = False
-# TODO: dynamic length
+
+    def _init_weight(self):
+        # print(self.decoder.all_weights)
+        # print(self.decoder.all_weights[0])
+        torch.nn.init.xavier_normal_(self.decoder.weight_hh_l0)
+        torch.nn.init.xavier_normal_(self.decoder.weight_ih_l0)
+

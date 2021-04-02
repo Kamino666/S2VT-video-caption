@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import os
 
 from tqdm import tqdm
 
@@ -8,7 +9,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Att_Baseline(nn.Module):
     def __init__(self, vocab_size, dim_feat, length, dim_hid=500, dim_embed=500, feat_dropout=0,
-                 out_dropout=0, sos_ix=3, eos_ix=4):
+                 out_dropout=0, sos_ix=3, eos_ix=4, rnn_type='lstm'):
         super(Att_Baseline, self).__init__()
         # save parameters
         self.dim_feat = dim_feat
@@ -18,10 +19,14 @@ class Att_Baseline(nn.Module):
         self.sos_ix = sos_ix
         self.eos_ix = eos_ix
         self.vocab_size = vocab_size
+        self.rnn_type = rnn_type
 
         # layers
         self.encoder = nn.LSTM(dim_hid, dim_hid, batch_first=True, bidirectional=True)
-        self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
+        if rnn_type.lower() == 'lstm':
+            self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
+        else:
+            self.decoder = nn.GRU(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
         self.feat_linear = nn.Linear(dim_feat, dim_hid)
         self.feat_drop = nn.Dropout(p=feat_dropout)
         self.embedding = nn.Embedding(vocab_size, dim_embed, padding_idx=0)
@@ -77,7 +82,10 @@ class Att_Baseline(nn.Module):
 
                 # output[B, 1, dim_hid*2] hidden[2, b, dim_hid]
                 dec_output, state = self.decoder(dec_input, state)
-                context = self.attention(enc_outputs, state[0])
+                if self.rnn_type.lower() == 'lstm':
+                    context = self.attention(enc_outputs, state[0])
+                else:
+                    context = self.attention(enc_outputs, state)
 
                 # prob[B, 1, vocab_size]
                 prob = self.out_linear(self.out_drop(dec_output))
@@ -95,7 +103,10 @@ class Att_Baseline(nn.Module):
 
                 # output[B, 1, dim_hid*2] hidden[2, b, dim_hid]
                 dec_output, state = self.decoder(dec_input, state)
-                context = self.attention(enc_outputs, state[0])
+                if self.rnn_type.lower() == 'lstm':
+                    context = self.attention(enc_outputs, state[0])
+                else:
+                    context = self.attention(enc_outputs, state)
 
                 # prob[B, 1, vocab_size]
                 prob = self.out_linear(self.out_drop(dec_output))
@@ -103,3 +114,42 @@ class Att_Baseline(nn.Module):
                 current_word = self.embedding(pred)  # [B, 1, dim_embed]
                 preds.append(pred)
             return torch.cat(preds, dim=1)  # [B, L]
+
+    def save_encoder_weights(self, path="./data/weights"):
+        encoder_weight_hh_l0 = self.encoder.weight_hh_l0
+        encoder_weight_ih_l0 = self.encoder.weight_ih_l0
+        encoder_bias_hh_l0 = self.encoder.bias_hh_l0
+        encoder_bias_ih_l0 = self.encoder.bias_ih_l0
+        feat_linear_weight = self.feat_linear.weight
+        feat_linear_bias = self.feat_linear.bias
+        embedding_weight = self.embedding.weight
+        torch.save(encoder_weight_hh_l0, os.path.join(path, "enc_weight_hh_l0"))
+        torch.save(encoder_weight_ih_l0, os.path.join(path, "enc_weight_ih_l0"))
+        torch.save(encoder_bias_hh_l0, os.path.join(path, "enc_bias_hh_l0"))
+        torch.save(encoder_bias_ih_l0, os.path.join(path, "enc_bias_ih_l0"))
+        torch.save(feat_linear_weight, os.path.join(path, "feat_linear_weight"))
+        torch.save(feat_linear_bias, os.path.join(path, "feat_linear_bias"))
+        torch.save(embedding_weight, os.path.join(path, "embedding_weight"))
+        print("********************\nsave weights success\n********************")
+
+    def load_encoder_weights(self, path="./data/weights"):
+        self.encoder.weight_hh_l0 = torch.load(os.path.join(path, "enc_weight_hh_l0")).to(device)
+        self.encoder.weight_ih_l0 = torch.load(os.path.join(path, "enc_weight_ih_l0")).to(device)
+        self.encoder.bias_hh_l0 = torch.load(os.path.join(path, "enc_bias_hh_l0")).to(device)
+        self.encoder.bias_ih_l0 = torch.load(os.path.join(path, "enc_bias_ih_l0")).to(device)
+        self.feat_linear.weight = torch.load(os.path.join(path, "feat_linear_weight")).to(device)
+        self.feat_linear.bias = torch.load(os.path.join(path, "feat_linear_bias")).to(device)
+        self.embedding.weight = torch.load(os.path.join(path, "embedding_weight")).to(device)
+        self.encoder.flatten_parameters()
+        print("********************\nload weights success\n********************")
+
+    def freeze_encoder_weights(self):
+        self.encoder.weight_hh_l0.requires_grad = False
+        self.encoder.weight_ih_l0.requires_grad = False
+        self.encoder.bias_hh_l0.requires_grad = False
+        self.encoder.bias_ih_l0.requires_grad = False
+        self.feat_linear.weight.requires_grad = False
+        self.feat_linear.bias.requires_grad = False
+        self.embedding.weight.requires_grad = False
+        print("********************\nfreeze weights success\n********************")
+

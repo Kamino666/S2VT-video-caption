@@ -20,21 +20,21 @@ writer = SummaryWriter()
 class Opt:
     """config class"""
     # - data config
-    caption_file = r"./data/captions.json"  # the file generated in prepare_captions.py
+    caption_file = r"./data/captions_server.json"  # the file generated in prepare_captions.py
     feats_path = r"./data/feats/vgg16_bn"  # the features extracted by extract_features.py
     # - model config
     train_length = 80  # fix length during training, the feats length must be equal to this
     dim_hidden = 512
     dim_embed = 512
     feat_dim = 4096
-    feat_dropout = 0
-    out_dropout = 0
-    rnn_dropout = 0
+    feat_dropout = 0.5
+    out_dropout = 0.5
+    rnn_dropout = 0.5
     num_layers = 1
     bidirectional = False  # do not use True yet
-    rnn_type = 'lstm'  # do not change to GRU yet
+    rnn_type = 'gru'  # do not change to GRU yet
     # - data config
-    batch_size = 16
+    batch_size = 64
     # - train config
     EPOCHS = 300
     save_freq = 100  # every n epoch, save once
@@ -46,6 +46,7 @@ class Opt:
     lr = 0.0001
     learning_rate_patience = 20
     # weight_decay = 5e-5  # Regularzation
+    extra_msg = "ori+GRU+batchsize64"
 
 
 def save_opt(opt):
@@ -68,7 +69,7 @@ def train():
     vocab_size = len(word2ix)
 
     # build model
-    # model = S2VT_Att(
+    # model = S2VT(
     #     vocab_size,
     #     opt.feat_dim,
     #     dim_hid=opt.dim_hidden,
@@ -83,11 +84,14 @@ def train():
     #     sos_ix=word2ix['<sos>'],
     #     eos_ix=word2ix['<eos>'],
     # ).to(device)
-    model = Att_Baseline(vocab_size, opt.feat_dim, length=opt.train_length, dim_hid=opt.dim_hidden, dim_embed=opt.dim_embed,
-                         feat_dropout=opt.feat_dropout, out_dropout=opt.out_dropout, sos_ix=3, eos_ix=4).to(device)
+    model = Att_Baseline(vocab_size, opt.feat_dim, length=opt.train_length, dim_hid=opt.dim_hidden,
+                         dim_embed=opt.dim_embed, feat_dropout=opt.feat_dropout, out_dropout=opt.out_dropout,
+                         sos_ix=word2ix['<sos>'], eos_ix=word2ix['<eos>'], rnn_type=opt.rnn_type).to(device)
     # model.load_glove_weights('./data/glove.6B.300d.txt', 300, trainset.ix2word)
+    # model.load_encoder_weights()
+    # model.freeze_encoder_weights()
     optimizer = optim.Adam(
-        model.parameters(),
+        filter(lambda p: p.requires_grad, model.parameters()),
         lr=opt.lr,
         # weight_decay=opt.weight_decay
     )
@@ -177,6 +181,5 @@ def train():
 
 if __name__ == '__main__':
     train()
-
 
 # TODO(Kamino): 走通MSR-VTT

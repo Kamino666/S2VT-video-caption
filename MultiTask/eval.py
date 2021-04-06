@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Opt:
-    model_path = r"../checkpoint/21_03_30_07_48_11-final.pth"
+    model_path = r"../checkpoint/21_04_03_10_20_47-final.pth"
     batch_size = 10
 
 
@@ -71,8 +71,8 @@ def eval():
         # save result
         for ID, pred in enumerate(preds):
             word_preds = [ix2word[i.item()] for i in pred]
-            if '<eos>' in word_preds:
-                word_preds = word_preds[:word_preds.index('<eos>')]
+            if '<end>' in word_preds:
+                word_preds = word_preds[:word_preds.index('<end>')]
             pred_dict[ID] = ' '.join(word_preds)
 
     return pred_dict

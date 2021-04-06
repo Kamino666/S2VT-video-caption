@@ -25,15 +25,13 @@ class Opt:
     train_length = 80  # fix length during training, the feats length must be equal to this
     dim_hidden = 1024
     dim_embed = 500
-    feat_dim = 4096
-    feat_dropout = 0.5
-    out_dropout = 0.5
-    rnn_dropout = 0.5
-    num_layers = 1
-    bidirectional = False  # do not use True yet
-    rnn_type = 'lstm'  # do not change to GRU yet
+    out_dropout = 0
+    rnn_dropout = 0
+    num_layers = 2
+    # bidirectional = False  # do not use True yet
+    # rnn_type = 'lstm'  # do not change to GRU yet
     # - data config
-    batch_size = 16
+    # batch_size = 16
     embed_weight_path = "../../data/MSR-VTT/embed_weight.npy"
     # - train config
     EPOCHS = 300
@@ -43,9 +41,10 @@ class Opt:
     start_time = time.strftime('%y_%m_%d_%H_%M_%S-', time.localtime())
     early_stopping_patience = 30
     # - optimizer config
-    lr = 0.001
+    lr = 0.0001
     learning_rate_patience = 20
     # weight_decay = 5e-5  # Regularzation
+    extra_msg = "lstm 2 layer no drop"
 
 
 def save_opt(opt):
@@ -81,8 +80,8 @@ def train(model_checkpoint=None):
 
     # build model
     if model_checkpoint is None:
-        model = Att_NoEncoder(vocab_size, opt.feat_dim, dim_hid=opt.dim_hidden, dim_embed=opt.dim_embed,
-                              feat_dropout=opt.feat_dropout, out_dropout=opt.out_dropout,
+        model = Att_NoEncoder(vocab_size, dim_hid=opt.dim_hidden, dim_embed=opt.dim_embed, num_layers=opt.num_layers,
+                              out_dropout=opt.out_dropout,rnn_dropout=opt.rnn_dropout,
                               sos_ix=word2ix['<start>'], eos_ix=word2ix['<end>']).to(device)
         model.load_embedding_weight(opt.embed_weight_path)
     else:

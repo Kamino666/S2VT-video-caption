@@ -6,11 +6,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Att_NoEncoder(nn.Module):
-    def __init__(self, vocab_size, dim_feat, dim_hid=1024, dim_embed=500, rnn_type='gru',
-                 feat_dropout=0, out_dropout=0, sos_ix=3, eos_ix=4):
+    def __init__(self, vocab_size, dim_hid=1024, dim_embed=500, rnn_type='gru',
+                 out_dropout=0, rnn_dropout=0, num_layers=1, sos_ix=3, eos_ix=4):
         super(Att_NoEncoder, self).__init__()
         # save parameters
-        self.dim_feat = dim_feat
         self.dim_hid = dim_hid
         self.dim_embed = dim_embed
         self.sos_ix = sos_ix
@@ -18,15 +17,15 @@ class Att_NoEncoder(nn.Module):
         self.vocab_size = vocab_size
         self.rnn_type = rnn_type
         self.length = 30
+        self.num_layers = num_layers
 
         # layers
         if rnn_type.lower() == 'lstm':
-            self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
+            self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True,
+                                   num_layers=num_layers, dropout=rnn_dropout)
         else:
             self.decoder = nn.GRU(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
         self._init_weight()
-        self.feat_linear = nn.Linear(dim_feat, dim_hid)
-        self.feat_drop = nn.Dropout(p=feat_dropout)
         self.embedding = nn.Embedding(vocab_size, dim_embed, padding_idx=0)
         self.out_linear = nn.Linear(dim_hid, vocab_size)
         self.out_drop = nn.Dropout(p=out_dropout)
@@ -38,16 +37,17 @@ class Att_NoEncoder(nn.Module):
     def attention(self, enc_outputs, dec_prev_hid=None):
         """
         :param enc_outputs: [B, L, dim_hid * 2]
-        :param dec_prev_hid: [1, B, dim_hid]
+        :param dec_prev_hid: [num_layers, B, dim_hid]
         :return:
         """
+        batch_size = enc_outputs.shape[0]
         if dec_prev_hid is None:
-            batch_size = enc_outputs.shape[0]
             dec_prev_hid = torch.zeros([1, batch_size, self.dim_hid], device=device)
         # enc_outputs[B, L, dim_hid * 2] -> enc_W_h[B, L, dim_hid]
         enc_W_h = self.att_enc(enc_outputs)
-        # dec_prev_hid[1, B, dim_hid] --repeat--> repeat_hid[B, L, dim_hid]
-        repeat_hid = dec_prev_hid.transpose(dim0=1, dim1=0)
+        # dec_prev_hid[num_layers, B, dim_hid] --repeat--> repeat_hid[B, L, dim_hid*num_layers]
+        repeat_hid = dec_prev_hid.transpose(dim0=1, dim1=0).unsqueeze(dim=1)
+        repeat_hid = repeat_hid.view([batch_size, 1, -1])
         repeat_hid = repeat_hid.repeat([1, self.vid_length, 1])
         dec_W_h = self.att_prev_hid(repeat_hid)
 

@@ -28,7 +28,7 @@ class Opt:
     dim_hidden = 1024
     dim_embed = 500
     feat_dim = 2048
-    feat_dropout = 0.5
+    # feat_dropout = 0.5
     out_dropout = 0.5
     rnn_dropout = 0.5
     num_layers = 1

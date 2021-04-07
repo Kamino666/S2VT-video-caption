@@ -80,20 +80,17 @@ class VideoDataset(Dataset):
         visual_feat = BigFile(os.path.join(feat_path))
         with open(os.path.join(feat_path, "video2frames.txt")) as f:
             v2f = eval(f.read())  # dict{video_id: frame_list[frame_id]}
-            for video_id, frame_list in v2f.items():
-                frame_vecs = []
-                for frame_id in frame_list:
-                    frame_vecs.append(visual_feat.read_one(frame_id))
-                frames_tensor = torch.tensor(frame_vecs)
-                if frames_tensor.shape[0] > 200:
-                    print(video_id)
-                    print(frames_tensor.shape[0])
-                    continue
-                # filter the train/test/valid split
-                if video_id in self.splits[mode]:
-                    self.IDs.append(video_id)
-                    self.feature_dict[video_id] = frames_tensor
-                # print(frames_tensor.shape, video_id)
+        for video_id, frame_list in v2f.items():
+            frame_vecs = []
+            for frame_id in frame_list:
+                frame_vecs.append(visual_feat.read_one(frame_id))
+            frames_tensor = torch.tensor(frame_vecs)
+            if frames_tensor.shape[0] > 200:
+                continue
+            # filter the train/test/valid split
+            if video_id in self.splits[mode]:
+                self.IDs.append(video_id)
+                self.feature_dict[video_id] = frames_tensor
 
         self.max_len = max_len
         print("prepare {} dataset. vocab_size: {}, dataset_size: {}"
@@ -145,8 +142,6 @@ def collate_fn(data):
     pad_labels = torch.cat(pad_labels, dim=0)
     masks = [i.unsqueeze(dim=0) for i in masks]
     masks = torch.cat(masks, dim=0)
-    # if lengths[0] > 100:
-    #     print(lengths, IDs)
     return padded_feats, lengths, pad_labels, IDs, masks
 
 

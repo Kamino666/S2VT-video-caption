@@ -1,0 +1,154 @@
+import pandas as pd
+import numpy as np
+import re
+import json
+from collections import Counter
+from tqdm import tqdm
+import pickle
+
+
+class Vocabulary(object):
+    """Simple vocabulary wrapper."""
+
+    def __init__(self, text_style):
+        self.word2idx = {}
+        self.idx2word = {}
+        self.idx = 0
+        self.text_style = text_style
+
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.word2idx[word] = self.idx
+            self.idx2word[self.idx] = word
+            self.idx += 1
+
+    def __call__(self, word):
+        if word not in self.word2idx and 'bow' not in self.text_style:
+            return self.word2idx['<unk>']
+        return self.word2idx[word]
+
+    def __len__(self):
+        return len(self.word2idx)
+
+
+def build_vocab(all_words, min_feq=1):
+    # use collections.Counter() to build vocab
+    all_words = all_words.most_common()
+    word2ix = {'<pad>': 0, '<unk>': 1}
+    for ix, (word, feq) in enumerate(tqdm(all_words, desc='building vocab'), start=2):
+        if feq < min_feq:
+            continue
+        word2ix[word] = ix
+    ix2word = {v: k for k, v in word2ix.items()}
+
+    # output info
+    print('number of words in vocab: {}'.format(len(word2ix)))
+    print('number of <unk> in vocab: {}'.format(len(all_words) - len(word2ix)))
+
+    return word2ix, ix2word
+
+
+def parse_csv(csv_file, captions_file, gts_file, vocab_file, clean_only=False, min_feq=1):
+    """
+    parse the .csv file in MSVD dataset
+    :param gts_file: save path
+    :param clean_only: only choose clean data
+    :param csv_file: path of MSVD videos
+    :param captions_file: save path
+    :return: None
+    """
+    # read csv
+    file = pd.read_csv(csv_file, encoding='utf-8')
+    data = pd.DataFrame(file)
+    data = data.dropna(axis=0)
+    eng_data = data[data['Language'] == 'English']
+    if clean_only is True:
+        eng_data = eng_data[eng_data['Source'] == 'clean']
+    print('There are totally {} english descriptions'.format(len(eng_data)))
+
+    # get valid captions and its video ids
+    captions = []
+    filenames = []
+    gts = {}  # for eval.py
+    max_cap_ids = {}  # for eval.py
+    for _, name, start, end, sentence in tqdm(eng_data[['VideoID', 'Start', 'End', 'Description']].itertuples(),
+                                              desc='reading captions'):
+        # get id
+        file_name = name + '_' + str(start) + '_' + str(end)  # + '.avi'
+        filenames.append(file_name)
+        # process caption
+        tokenized = sentence.lower()
+        tokenized = re.sub(r'[~\\/().!,;?:]', ' ', tokenized)
+        gts_token = tokenized
+        tokenized = tokenized.split()
+        tokenized = ['<start>'] + tokenized + ['<end>']
+        captions.append(tokenized)
+        # gts
+        if file_name in gts:
+            # if max_cap_ids[file_name] <= 10:
+            max_cap_ids[file_name] += 1
+            gts[file_name].append({
+                u'image_id': file_name,
+                u'cap_id': max_cap_ids[file_name],
+                u'caption': sentence,
+                u'tokenized': gts_token
+            })
+        else:
+            max_cap_ids[file_name] = 0
+            gts[file_name] = [{
+                u'image_id': file_name,
+                u'cap_id': 0,
+                u'caption': sentence,
+                u'tokenized': gts_token
+            }]
+
+    # load vocab
+    with open(vocab_file, 'rb') as f:
+        vocab = pickle.load(f)
+        assert isinstance(vocab, Vocabulary)
+    word2ix, ix2word = vocab.word2idx, vocab.idx2word
+
+    """0 <pad>, 1 <start>, 2 <end>, 3 <unk>"""
+    # turn words into index (1 is <unk>)
+    captions = [[word2ix.get(w, word2ix['<unk>']) for w in caption]
+                for caption in tqdm(captions, desc='turing words into index')]
+
+    # build dict   filename: [captions]
+    caption_dict = {}
+    for name, cap in zip(filenames, captions):
+        if name not in caption_dict.keys():
+            caption_dict[name] = []
+        caption_dict[name].append(cap)
+
+    # split dataset
+    data_split = [1200, 670, -1]  # train valid test
+    vid_names = list(caption_dict.keys())
+    np.random.shuffle(vid_names)
+    train_split = vid_names[:data_split[0]]
+    valid_split = vid_names[data_split[0]:data_split[0] + data_split[1]]
+    test_split = vid_names[data_split[0] + data_split[1]:]
+
+    print("train:{} valid:{} test:{}".format(len(train_split), len(valid_split), len(test_split)))
+
+    # save files
+    with open(captions_file, 'w+', encoding='utf-8') as f:
+        json.dump(
+            {'word2ix': word2ix,
+             'ix2word': ix2word,
+             'captions': caption_dict,
+             'splits': {'train': train_split, 'valid': valid_split, 'test': test_split}}, f
+        )
+    with open(gts_file, 'w+', encoding='utf-8') as f:
+        json.dump({'gts': gts}, f)
+
+
+if __name__ == '__main__':
+    parse_csv(
+        csv_file=r'../data/video_corpus.csv',
+        captions_file=r'multi_task_data/captions_msvd_min5.json',
+        gts_file=r"multi_task_data/gts_msvd_min5.json",
+        vocab_file=r"../data/word_vocab_5.pkl",
+        clean_only=True,
+        min_feq=5,
+    )
+

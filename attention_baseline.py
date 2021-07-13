@@ -21,6 +21,7 @@ class Att_Baseline(nn.Module):
 
         # layers
         self.encoder = nn.LSTM(dim_hid, dim_hid, batch_first=True, bidirectional=True)
+        self.text_encoder = nn.LSTM(dim_embed, dim_embed, batch_first=True)  # new ADD
         self.decoder = nn.LSTM(dim_hid * 2 + dim_embed, dim_hid, batch_first=True)
         self.feat_linear = nn.Linear(dim_feat, dim_hid)
         self.feat_drop = nn.Dropout(p=feat_dropout)
@@ -69,6 +70,7 @@ class Att_Baseline(nn.Module):
         if mode == 'train':
             context = self.attention(enc_outputs)  # [B, 1, dim_hid * 2]
             embed_targets = self.embedding(targets)  # [B, L-1, dim_embed]
+            embed_targets, _ = self.text_encoder(embed_targets)  # NEW ADD!!
             state = None
             probs = []
             for i in range(self.length - 1):  # using L-1 target to predict L-1 words
@@ -87,6 +89,7 @@ class Att_Baseline(nn.Module):
             # current_word[B, 1, dim_embed]
             current_word = (self.sos_ix * torch.ones([batch_size], dtype=torch.long)).to(device)
             current_word = self.embedding(current_word).view([batch_size, 1, -1])
+            current_word, _ = self.text_encoder(current_word)
             context = self.attention(enc_outputs)  # [B, 1, dim_hid * 2]
             state = None
             preds = []
@@ -101,5 +104,6 @@ class Att_Baseline(nn.Module):
                 prob = self.out_linear(self.out_drop(dec_output))
                 pred = torch.argmax(prob, dim=2)  # [B, 1]
                 current_word = self.embedding(pred)  # [B, 1, dim_embed]
+                current_word, _ = self.text_encoder(current_word)
                 preds.append(pred)
             return torch.cat(preds, dim=1)  # [B, L]
